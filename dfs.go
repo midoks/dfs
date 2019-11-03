@@ -80,8 +80,9 @@ func (this *Server) Run() {
 	router.GET("/", func(c *gin.Context) {
 		c.String(http.StatusOK, "Hello World")
 	})
-	fmt.Println("Port:8081")
-	router.Run(":8081")
+
+	fmt.Println("Port", Config().Addr)
+	router.Run(Config().Addr)
 }
 
 func main() {
