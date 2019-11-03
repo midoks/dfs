@@ -5,10 +5,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
-	// "net/http"
+	"mime/multipart"
+	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -37,8 +41,6 @@ type Server struct {
 
 func init() {
 	fmt.Println("init start")
-
-	common := common.NewCommon()
 
 	DOCKER_DIR = os.Getenv("GODFS_DIR")
 	if DOCKER_DIR != "" {
@@ -76,18 +78,56 @@ func Config() *config.GloablConfig {
 }
 
 func (this *Server) Upload(c *gin.Context) {
+	var (
+		folder  string
+		outPath string
+		file    *multipart.FileHeader
+		fname   string
+	)
 
+	fmt.Println(c.PostForm("output"))
+
+	file, _ = c.FormFile("file")
+
+	_, fname = filepath.Split(file.Filename)
+	if Config().RenameFile {
+		fname = common.MD5UUID() + path.Ext(fname)
+	}
+
+	folder = time.Now().Format("20060102/15/04")
+	folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
+
+	if f, _ := common.FileExists(folder); !f {
+		os.MkdirAll(folder, 0775)
+	}
+	outPath = fmt.Sprintf(folder+"/%s", fname)
+
+	c.SaveUploadedFile(file, outPath)
+
+	c.JSON(http.StatusOK, gin.H{
+		"src": outPath,
+	})
 }
 
 func (this *Server) Download(c *gin.Context) {
 
-	if c.Request.RequestURI == "/" ||
-		c.Request.RequestURI == "" ||
-		c.Request.RequestURI == "/"+Config().Group ||
-		c.Request.RequestURI == "/"+Config().Group+"/" {
-		this.Index(c)
-		return
-	}
+	// if c.Request.RequestURI == "/" ||
+	// 	c.Request.RequestURI == "" ||
+	// 	c.Request.RequestURI == "/"+Config().Group ||
+	// 	c.Request.RequestURI == "/"+Config().Group+"/" {
+	// 	this.Index(c)
+	// 	return
+	// }
+
+	fullpath := c.Param("path")
+
+	fmt.Println(fullpath)
+
+	// c.JSON(http.StatusOK, gin.H{
+	// 	"src": c.Request.RequestURI,
+	// })
+
+	c.File("./" + fullpath)
 }
 
 func (this *Server) Index(c *gin.Context) {
@@ -96,7 +136,7 @@ func (this *Server) Index(c *gin.Context) {
 		uploadBigUrl string
 		uppy         string
 	)
-	common := common.NewCommon()
+
 	uploadUrl = "/upload"
 	uploadBigUrl = CONST_BIG_UPLOAD_PATH_SUFFIX
 
@@ -130,16 +170,15 @@ func (this *Server) Run() {
 		groupRoute = "/" + Config().Group
 	}
 
-	uploadPage := "upload.html"
-
-	fmt.Println(groupRoute)
+	// uploadPage := "upload.html"
 	if groupRoute == "" {
 		router.GET(fmt.Sprintf("%s", "/"), this.Download)
-		router.GET(fmt.Sprintf("/%s", uploadPage), this.Index)
+		// router.GET(fmt.Sprintf("/%s", uploadPage), this.Index)
 	} else {
 		router.GET(fmt.Sprintf("%s", "/"), this.Download)
 		router.GET(fmt.Sprintf("%s", groupRoute), this.Download)
-		router.GET(fmt.Sprintf("%s/%s", groupRoute, uploadPage), this.Index)
+		router.GET(fmt.Sprintf("%s/*path", groupRoute), this.Download)
+		// router.GET(fmt.Sprintf("%s/%s", groupRoute, uploadPage), this.Index)
 	}
 
 	router.POST(fmt.Sprintf("%s/upload", groupRoute), this.Upload)

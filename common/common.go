@@ -1,7 +1,13 @@
 package common
 
 import (
+	"crypto/md5"
+	// "crypto/sha1"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	random "math/rand"
 	"net"
@@ -10,14 +16,7 @@ import (
 	"time"
 )
 
-type Common struct {
-}
-
-func NewCommon() *Common {
-	return &Common{}
-}
-
-func (this *Common) FileExists(fileName string) (bool, error) {
+func FileExists(fileName string) (bool, error) {
 	_, err := os.Stat(fileName)
 	if err == nil {
 		return true, nil
@@ -28,12 +27,12 @@ func (this *Common) FileExists(fileName string) (bool, error) {
 	return false, err
 }
 
-func (this *Common) IsExist(filename string) bool {
+func IsExist(filename string) bool {
 	_, err := os.Stat(filename)
 	return err == nil || os.IsExist(err)
 }
 
-func (this *Common) RandInt(min, max int) int {
+func RandInt(min, max int) int {
 	return func(min, max int) int {
 		r := random.New(random.NewSource(time.Now().UnixNano()))
 		if min >= max {
@@ -43,7 +42,7 @@ func (this *Common) RandInt(min, max int) int {
 	}(min, max)
 }
 
-func (this *Common) GetPulicIP() string {
+func GetPulicIP() string {
 	var (
 		err  error
 		conn net.Conn
@@ -57,8 +56,8 @@ func (this *Common) GetPulicIP() string {
 	return localAddr[0:idx]
 }
 
-func (this *Common) ReadBinFile(path string) ([]byte, error) {
-	if this.IsExist(path) {
+func ReadBinFile(path string) ([]byte, error) {
+	if IsExist(path) {
 		fi, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -70,10 +69,29 @@ func (this *Common) ReadBinFile(path string) ([]byte, error) {
 	}
 }
 
-func (this *Common) WriteFile(path string, data string) bool {
+func WriteFile(path string, data string) bool {
 	if err := ioutil.WriteFile(path, []byte(data), 0775); err == nil {
 		return true
 	} else {
 		return false
 	}
+}
+
+func MD5(str string) string {
+	md := md5.New()
+	md.Write([]byte(str))
+	return fmt.Sprintf("%x", md.Sum(nil))
+}
+
+func GetUUID() string {
+	b := make([]byte, 48)
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return ""
+	}
+	id := MD5(base64.URLEncoding.EncodeToString(b))
+	return fmt.Sprintf("%s-%s-%s-%s-%s", id[0:8], id[8:12], id[12:16], id[16:20], id[20:])
+}
+
+func MD5UUID() string {
+	return MD5(GetUUID())
 }
