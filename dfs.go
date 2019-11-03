@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -19,6 +21,7 @@ const (
 )
 
 var (
+	ptr                  unsafe.Pointer
 	DOCKER_DIR           = ""
 	STORE_DIR            = STORE_DIR_NAME
 	CONF_DIR             = CONF_DIR_NAME
@@ -29,16 +32,6 @@ var (
 )
 
 type Server struct {
-}
-
-func (this *Server) Run() {
-	router := gin.Default()
-
-	router.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "Hello World")
-	})
-	fmt.Println("Port:8081")
-	router.Run(":8081")
 }
 
 func init() {
@@ -72,7 +65,23 @@ func init() {
 		cfg := fmt.Sprintf(config.CONFIG_JSON, peerId, peer, peer)
 		common.WriteFile(CONST_CONF_FILE_NAME, cfg)
 	}
+
+	ptr = config.Parse(CONST_CONF_FILE_NAME)
 	fmt.Println("init end")
+}
+
+func Config() *config.GloablConfig {
+	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
+}
+
+func (this *Server) Run() {
+	router := gin.Default()
+
+	router.GET("/", func(c *gin.Context) {
+		c.String(http.StatusOK, "Hello World")
+	})
+	fmt.Println("Port:8081")
+	router.Run(":8081")
 }
 
 func main() {

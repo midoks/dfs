@@ -1,5 +1,15 @@
 package config
 
+import (
+	"encoding/json"
+	"fmt"
+	log "github.com/cihub/seelog"
+	"io/ioutil"
+	"os"
+	"sync/atomic"
+	"unsafe"
+)
+
 const (
 	CONFIG_JSON = `{
 	"绑定端号": "端口",
@@ -133,6 +143,28 @@ type GloablConfig struct {
 	RetryCount           int      `json:"retry_count"`
 }
 
-// func Config() *GloablConfig {
-// 	return (*GloablConfig)(atomic.LoadPointer(&ptr))
-// }
+func Parse(filePath string) unsafe.Pointer {
+	defer log.Flush()
+	file, err := os.Open(filePath)
+	if err != nil {
+		panic(fmt.Sprintln("open file path:", filePath, "error:", err))
+	}
+	defer file.Close()
+	// var FileName string
+	// FileName = filePath
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		panic(fmt.Sprintln("file path:", filePath, " read all error:", err))
+	}
+
+	var c GloablConfig
+	if err := json.Unmarshal(data, &c); err != nil {
+		panic(fmt.Sprintln("file path:", filePath, "json unmarshal error:", err))
+	}
+	log.Info(c)
+
+	var ptr unsafe.Pointer
+	atomic.StorePointer(&ptr, unsafe.Pointer(&c))
+	log.Info("config parse success")
+	return ptr
+}
