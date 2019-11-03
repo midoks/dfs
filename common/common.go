@@ -1,6 +1,7 @@
 package common
 
 import (
+	"errors"
 	"io/ioutil"
 	random "math/rand"
 	"net"
@@ -27,6 +28,11 @@ func (this *Common) FileExists(fileName string) (bool, error) {
 	return false, err
 }
 
+func (this *Common) IsExist(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil || os.IsExist(err)
+}
+
 func (this *Common) RandInt(min, max int) int {
 	return func(min, max int) int {
 		r := random.New(random.NewSource(time.Now().UnixNano()))
@@ -49,6 +55,19 @@ func (this *Common) GetPulicIP() string {
 	localAddr := conn.LocalAddr().String()
 	idx := strings.LastIndex(localAddr, ":")
 	return localAddr[0:idx]
+}
+
+func (this *Common) ReadBinFile(path string) ([]byte, error) {
+	if this.IsExist(path) {
+		fi, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer fi.Close()
+		return ioutil.ReadAll(fi)
+	} else {
+		return nil, errors.New("not found")
+	}
 }
 
 func (this *Common) WriteFile(path string, data string) bool {
