@@ -150,8 +150,6 @@ func Parse(filePath string) unsafe.Pointer {
 		panic(fmt.Sprintln("open file path:", filePath, "error:", err))
 	}
 	defer file.Close()
-	// var FileName string
-	// FileName = filePath
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
 		panic(fmt.Sprintln("file path:", filePath, " read all error:", err))
