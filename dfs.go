@@ -2,17 +2,18 @@ package main
 
 import (
 	"fmt"
+	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"mime/multipart"
-	"net/http"
+	// "net/http"
 	"os"
-	"path"
-	"path/filepath"
+	// "path"
+	// "path/filepath"
 	"strings"
 	"sync/atomic"
-	"time"
+	// "time"
 	"unsafe"
 )
 
@@ -79,45 +80,53 @@ func Config() *config.GloablConfig {
 
 func (this *Server) Upload(c *gin.Context) {
 	var (
-		folder  string
-		outPath string
-		file    *multipart.FileHeader
-		fname   string
+		// folder    string
+		// outPath string
+		file *multipart.FileHeader
+		// fname     string
+		md5sum    string
+		queryPath string
+		output    string
 	)
 
-	fmt.Println(c.PostForm("output"))
-
+	md5sum = c.Param("md5")
+	queryPath = c.Param("path")
 	file, _ = c.FormFile("file")
+	output = c.PostForm("output")
 
-	_, fname = filepath.Split(file.Filename)
-	if Config().RenameFile {
-		fname = common.MD5UUID() + path.Ext(fname)
-	}
+	fmt.Println(output)
+	fmt.Println(md5sum)
+	fmt.Println(queryPath)
+	fmt.Println(file)
+	// _, fname = filepath.Split(file.Filename)
+	// if Config().RenameFile {
+	// 	fname = common.MD5UUID() + path.Ext(fname)
+	// }
 
-	folder = time.Now().Format("20060102/15/04")
-	folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
+	// folder = time.Now().Format("20060102/15/04")
+	// folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
 
-	if f, _ := common.FileExists(folder); !f {
-		os.MkdirAll(folder, 0775)
-	}
-	outPath = fmt.Sprintf(folder+"/%s", fname)
+	// if f, _ := common.FileExists(folder); !f {
+	// 	os.MkdirAll(folder, 0775)
+	// }
+	// outPath = fmt.Sprintf(folder+"/%s", fname)
 
-	c.SaveUploadedFile(file, outPath)
+	// c.SaveUploadedFile(file, outPath)
 
-	c.JSON(http.StatusOK, gin.H{
-		"src": outPath,
-	})
+	// c.JSON(http.StatusOK, gin.H{
+	// 	"src": outPath,
+	// })
 }
 
 func (this *Server) Download(c *gin.Context) {
 
-	// if c.Request.RequestURI == "/" ||
-	// 	c.Request.RequestURI == "" ||
-	// 	c.Request.RequestURI == "/"+Config().Group ||
-	// 	c.Request.RequestURI == "/"+Config().Group+"/" {
-	// 	this.Index(c)
-	// 	return
-	// }
+	if c.Request.RequestURI == "/" ||
+		c.Request.RequestURI == "" ||
+		c.Request.RequestURI == "/"+Config().Group ||
+		c.Request.RequestURI == "/"+Config().Group+"/" {
+		this.Index(c)
+		return
+	}
 
 	fullpath := c.Param("path")
 
@@ -142,14 +151,13 @@ func (this *Server) Index(c *gin.Context) {
 
 	if Config().EnableWebUpload {
 		if Config().SupportGroupManage {
-			uploadUrl = fmt.Sprintf("/%s/upload", Config().Group)
-			uploadBigUrl = fmt.Sprintf("/%s%s", Config().Group, CONST_BIG_UPLOAD_PATH_SUFFIX)
+			uploadBigUrl = fmt.Sprintf("%s%s", uploadUrl, CONST_BIG_UPLOAD_PATH_SUFFIX)
 		}
 		uppy = config.UPLOAD_TPL
 		uppyFileName := STATIC_DIR + "/uppy.html"
 		if common.IsExist(uppyFileName) {
 			if data, err := common.ReadBinFile(uppyFileName); err != nil {
-				// log.Error(err)
+				log.Error(err)
 			} else {
 				uppy = string(data)
 			}
@@ -170,18 +178,19 @@ func (this *Server) Run() {
 		groupRoute = "/" + Config().Group
 	}
 
-	// uploadPage := "upload.html"
 	if groupRoute == "" {
 		router.GET(fmt.Sprintf("%s", "/"), this.Download)
-		// router.GET(fmt.Sprintf("/%s", uploadPage), this.Index)
 	} else {
+
 		router.GET(fmt.Sprintf("%s", "/"), this.Download)
 		router.GET(fmt.Sprintf("%s", groupRoute), this.Download)
 		router.GET(fmt.Sprintf("%s/*path", groupRoute), this.Download)
-		// router.GET(fmt.Sprintf("%s/%s", groupRoute, uploadPage), this.Index)
+		router.POST(fmt.Sprintf("%s/*path", groupRoute), this.Download)
 	}
 
-	router.POST(fmt.Sprintf("%s/upload", groupRoute), this.Upload)
+	router.GET("/upload.html", this.Index)
+	router.POST("/upload", this.Upload)
+	router.Any("/upload/*path", this.Upload)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
