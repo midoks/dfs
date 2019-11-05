@@ -2,8 +2,8 @@ package common
 
 import (
 	"crypto/md5"
-	// "crypto/sha1"
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -74,6 +74,31 @@ func WriteFile(path string, data string) bool {
 		return true
 	} else {
 		return false
+	}
+}
+
+func GetFileSha1Sum(file *os.File) string {
+	file.Seek(0, 0)
+	md5h := sha1.New()
+	io.Copy(md5h, file)
+	sum := fmt.Sprintf("%x", md5h.Sum(nil))
+	return sum
+}
+
+func GetFileMd5(file *os.File) string {
+	file.Seek(0, 0)
+	md5h := md5.New()
+	io.Copy(md5h, file)
+	sum := fmt.Sprintf("%x", md5h.Sum(nil))
+	return sum
+}
+
+func GetFileSum(file *os.File, alg string) string {
+	alg = strings.ToLower(alg)
+	if alg == "sha1" {
+		return GetFileSha1Sum(file)
+	} else {
+		return GetFileMd5(file)
 	}
 }
 

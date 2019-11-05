@@ -7,15 +7,18 @@ import (
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"mime/multipart"
-	// "net/http"
+	"net/http"
 	"os"
-	// "path"
-	// "path/filepath"
+	"path"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
-	// "time"
+	"time"
 	"unsafe"
 )
+
+var server *Server
 
 const (
 	STORE_DIR_NAME               = "files"
@@ -37,7 +40,25 @@ var (
 	CONST_CONF_FILE_NAME = CONF_DIR + "/cfg.json"
 )
 
+type QueueUploadChan struct {
+	c       *gin.Context
+	tmpPath string
+	done    chan bool
+}
+
 type Server struct {
+	queueUpload chan QueueUploadChan
+}
+
+func NewServer() *Server {
+	var srv = &Server{
+		queueUpload: make(chan QueueUploadChan, 100),
+	}
+	return srv
+}
+
+func Config() *config.GloablConfig {
+	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
 }
 
 func init() {
@@ -71,51 +92,134 @@ func init() {
 	}
 
 	ptr = config.Parse(CONST_CONF_FILE_NAME)
+
+	server = NewServer()
+	server.initComponent()
 	fmt.Println("init end")
 }
 
-func Config() *config.GloablConfig {
-	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
+func (this *Server) initComponent() {
+
+	if Config().ReadTimeout == 0 {
+		Config().ReadTimeout = 60 * 10
+	}
+	if Config().WriteTimeout == 0 {
+		Config().WriteTimeout = 60 * 10
+	}
+	if Config().SyncWorker == 0 {
+		Config().SyncWorker = 200
+	}
+	if Config().UploadWorker == 0 {
+		Config().UploadWorker = runtime.NumCPU() + 4
+		if runtime.NumCPU() < 4 {
+			Config().UploadWorker = 8
+		}
+	}
+	if Config().UploadQueueSize == 0 {
+		Config().UploadQueueSize = 200
+	}
+	if Config().RetryCount == 0 {
+		Config().RetryCount = 3
+	}
+}
+
+func (this *Server) initUploadTask() {
+	uploadFunc := func() {
+		fmt.Println("uploadFunc")
+		for {
+
+			task := <-this.queueUpload
+			this.uploadChan(task.c, task.tmpPath)
+			fmt.Println(task)
+			// this.upload(*wr.w, wr.r)
+			// this.rtMap.AddCountInt64(CONST_UPLOAD_COUNTER_KEY, wr.r.ContentLength)
+			// if v, ok := this.rtMap.GetValue(CONST_UPLOAD_COUNTER_KEY); ok {
+			// 	if v.(int64) > 1*1024*1024*1024 {
+			// 		var _v int64
+			// 		this.rtMap.Put(CONST_UPLOAD_COUNTER_KEY, _v)
+			// 		debug.FreeOSMemory()
+			// 	}
+			// }
+			task.done <- true
+		}
+	}
+	for i := 0; i < Config().UploadWorker; i++ {
+		go uploadFunc()
+	}
+}
+
+func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
+	fmt.Println(c)
+	var (
+		fname  string
+		file   *multipart.FileHeader
+		folder string
+	)
+
+	scene := c.PostForm("scene")
+
+	folder = time.Now().Format("20060102/15/04")
+
+	if scene != "" {
+		folder = fmt.Sprintf(STORE_DIR+"/%s/%s", scene, folder)
+	} else {
+		folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
+	}
+
+	file, _ = c.FormFile("file")
+	_, fname = filepath.Split(file.Filename)
+	if Config().RenameFile {
+		fname = common.MD5UUID() + path.Ext(fname)
+	}
+
+	if f, _ := common.FileExists(folder); !f {
+		os.MkdirAll(folder, 0777)
+	}
+	outPath := fmt.Sprintf(folder+"/%s", fname)
+
+	tmpFile, _ := os.Open(tmpFilePath)
+	defer tmpFile.Close()
+
+	fileMd5 := ""
+	if Config().EnableDistinctFile {
+		fileMd5 = common.GetFileSum(tmpFile, Config().FileSumArithmetic)
+	} else {
+		fileMd5 = common.MD5(outPath)
+	}
+
+	c.SaveUploadedFile(file, outPath)
+
+	c.JSON(http.StatusOK, gin.H{
+		"src":   outPath,
+		"scene": scene,
+		"size":  file.Size,
+		"md5":   fileMd5,
+	})
 }
 
 func (this *Server) Upload(c *gin.Context) {
 	var (
-		// folder    string
-		// outPath string
-		file *multipart.FileHeader
-		// fname     string
-		md5sum    string
-		queryPath string
-		output    string
+		file   *multipart.FileHeader
+		folder string
 	)
 
-	md5sum = c.Param("md5")
-	queryPath = c.Param("path")
 	file, _ = c.FormFile("file")
-	output = c.PostForm("output")
+	folder = time.Now().Format("20060102")
+	folder = fmt.Sprintf(STORE_DIR+"/_tmp/%s", folder)
 
-	fmt.Println(output)
-	fmt.Println(md5sum)
-	fmt.Println(queryPath)
-	fmt.Println(file)
-	// _, fname = filepath.Split(file.Filename)
-	// if Config().RenameFile {
-	// 	fname = common.MD5UUID() + path.Ext(fname)
-	// }
+	if f, _ := common.FileExists(folder); !f {
+		os.MkdirAll(folder, 0777)
+	}
 
-	// folder = time.Now().Format("20060102/15/04")
-	// folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
+	outFile := fmt.Sprintf(folder+"/%s", common.GetUUID())
+	defer func() {
+		os.Remove(outFile)
+	}()
+	c.SaveUploadedFile(file, outFile)
 
-	// if f, _ := common.FileExists(folder); !f {
-	// 	os.MkdirAll(folder, 0775)
-	// }
-	// outPath = fmt.Sprintf(folder+"/%s", fname)
-
-	// c.SaveUploadedFile(file, outPath)
-
-	// c.JSON(http.StatusOK, gin.H{
-	// 	"src": outPath,
-	// })
+	done := make(chan bool, 1)
+	this.queueUpload <- QueueUploadChan{c, outFile, done}
+	<-done
 }
 
 func (this *Server) Download(c *gin.Context) {
@@ -136,6 +240,8 @@ func (this *Server) Download(c *gin.Context) {
 	// 	"src": c.Request.RequestURI,
 	// })
 
+	// strings.fullpath
+
 	c.File("./" + fullpath)
 }
 
@@ -151,7 +257,7 @@ func (this *Server) Index(c *gin.Context) {
 
 	if Config().EnableWebUpload {
 		if Config().SupportGroupManage {
-			uploadBigUrl = fmt.Sprintf("%s%s", uploadUrl, CONST_BIG_UPLOAD_PATH_SUFFIX)
+			uploadBigUrl = "/file"
 		}
 		uppy = config.UPLOAD_TPL
 		uppyFileName := STATIC_DIR + "/uppy.html"
@@ -171,6 +277,9 @@ func (this *Server) Index(c *gin.Context) {
 }
 
 func (this *Server) Run() {
+
+	go this.initUploadTask()
+
 	router := gin.Default()
 
 	groupRoute := ""
@@ -190,13 +299,11 @@ func (this *Server) Run() {
 
 	router.GET("/upload.html", this.Index)
 	router.POST("/upload", this.Upload)
-	router.Any("/upload/*path", this.Upload)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
 }
 
 func main() {
-	var s *Server
-	s.Run()
+	server.Run()
 }
