@@ -194,6 +194,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		"scene": scene,
 		"size":  file.Size,
 		"md5":   fileMd5,
+		"code":  0,
 	})
 }
 
@@ -233,16 +234,7 @@ func (this *Server) Download(c *gin.Context) {
 	}
 
 	fullpath := c.Param("path")
-
-	fmt.Println(fullpath)
-
-	// c.JSON(http.StatusOK, gin.H{
-	// 	"src": c.Request.RequestURI,
-	// })
-
-	// strings.fullpath
-
-	c.File("./" + fullpath)
+	c.File("files/" + fullpath)
 }
 
 func (this *Server) Index(c *gin.Context) {
