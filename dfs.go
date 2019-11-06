@@ -149,24 +149,22 @@ func (this *Server) initUploadTask() {
 }
 
 func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
-	fmt.Println(c)
 	var (
-		fname  string
-		file   *multipart.FileHeader
+		fname string
+		// file   *multipart.FileHeader
 		folder string
 	)
 
-	scene := c.PostForm("scene")
-
 	folder = time.Now().Format("20060102/15/04")
 
+	scene := c.PostForm("scene")
 	if scene != "" {
 		folder = fmt.Sprintf(STORE_DIR+"/%s/%s", scene, folder)
 	} else {
 		folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
 	}
 
-	file, _ = c.FormFile("file")
+	file, _ := c.FormFile("file")
 	_, fname = filepath.Split(file.Filename)
 	if Config().RenameFile {
 		fname = common.MD5UUID() + path.Ext(fname)
@@ -194,6 +192,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		"scene": scene,
 		"size":  file.Size,
 		"md5":   fileMd5,
+		"group": Config().Group,
 		"code":  0,
 	})
 }
