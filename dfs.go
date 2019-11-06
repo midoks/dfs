@@ -191,7 +191,10 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 
 	file, err = c.FormFile("file")
 
-	fmt.Println(err)
+	if err != nil {
+		this.retFail(c, "upload request fail!")
+	}
+
 	_, fname = filepath.Split(file.Filename)
 	if Config().RenameFile {
 		fname = common.MD5UUID() + path.Ext(fname)
@@ -211,10 +214,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		fileMd5 = common.MD5(outPath)
 	}
 
-	findData, yes := this.db.FindFileByMd5(fileMd5)
-	if yes {
-		fmt.Println(findData)
-	}
+	findData, _ := this.db.FindFileByMd5(fileMd5)
 
 	if findData.Md5 == fileMd5 {
 		outPath = findData.Path
