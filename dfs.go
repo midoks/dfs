@@ -1,11 +1,14 @@
 package main
 
 import (
+	// "database/sql"
 	"fmt"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
+	// _ "github.com/mattn/go-sqlite3"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
+	"github.com/midoks/godfs/database"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -48,6 +51,7 @@ type QueueUploadChan struct {
 
 type Server struct {
 	queueUpload chan QueueUploadChan
+	db          *database.DB
 }
 
 func NewServer() *Server {
@@ -95,6 +99,7 @@ func init() {
 
 	server = NewServer()
 	server.initComponent()
+	server.initDb()
 	fmt.Println("init end")
 }
 
@@ -123,14 +128,16 @@ func (this *Server) initComponent() {
 	}
 }
 
+func (this *Server) initDb() {
+	this.db = database.Open("data/dfs.db")
+}
+
 func (this *Server) initUploadTask() {
 	uploadFunc := func() {
-		fmt.Println("uploadFunc")
 		for {
 
 			task := <-this.queueUpload
 			this.uploadChan(task.c, task.tmpPath)
-			fmt.Println(task)
 			// this.upload(*wr.w, wr.r)
 			// this.rtMap.AddCountInt64(CONST_UPLOAD_COUNTER_KEY, wr.r.ContentLength)
 			// if v, ok := this.rtMap.GetValue(CONST_UPLOAD_COUNTER_KEY); ok {
@@ -148,11 +155,29 @@ func (this *Server) initUploadTask() {
 	}
 }
 
+func (this *Server) retOk(c *gin.Context, data interface{}) {
+	c.JSON(http.StatusOK, gin.H{
+		"msg":  "ok",
+		"code": 0,
+		"data": data,
+	})
+}
+
+func (this *Server) retFail(c *gin.Context, msg string) {
+	c.JSON(http.StatusOK, gin.H{
+		"code": -1,
+		"msg":  msg,
+	})
+}
+
 func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 	var (
-		fname string
-		// file   *multipart.FileHeader
-		folder string
+		err     error
+		fname   string
+		file    *multipart.FileHeader
+		folder  string
+		outPath string
+		fileMd5 string
 	)
 
 	folder = time.Now().Format("20060102/15/04")
@@ -164,7 +189,9 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
 	}
 
-	file, _ := c.FormFile("file")
+	file, err = c.FormFile("file")
+
+	fmt.Println(err)
 	_, fname = filepath.Split(file.Filename)
 	if Config().RenameFile {
 		fname = common.MD5UUID() + path.Ext(fname)
@@ -173,28 +200,41 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 	if f, _ := common.FileExists(folder); !f {
 		os.MkdirAll(folder, 0777)
 	}
-	outPath := fmt.Sprintf(folder+"/%s", fname)
+	outPath = fmt.Sprintf(folder+"/%s", fname)
 
 	tmpFile, _ := os.Open(tmpFilePath)
 	defer tmpFile.Close()
 
-	fileMd5 := ""
 	if Config().EnableDistinctFile {
 		fileMd5 = common.GetFileSum(tmpFile, Config().FileSumArithmetic)
 	} else {
 		fileMd5 = common.MD5(outPath)
 	}
 
-	c.SaveUploadedFile(file, outPath)
+	findData, yes := this.db.FindFileByMd5(fileMd5)
+	if yes {
+		fmt.Println(findData)
+	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"src":   outPath,
-		"scene": scene,
-		"size":  file.Size,
-		"md5":   fileMd5,
-		"group": Config().Group,
-		"code":  0,
-	})
+	if findData.Md5 == fileMd5 {
+		outPath = findData.Path
+	} else {
+		err = c.SaveUploadedFile(file, outPath)
+		if err != nil {
+			this.retFail(c, "upload fail!")
+			return
+		}
+		this.db.AddFileRow(fileMd5, outPath, "attr", time.Now().Format("2006-01-02T15:04:05Z"))
+	}
+
+	data := make(map[string]interface{})
+	data["size"] = file.Size
+	data["src"] = outPath
+	data["scene"] = scene
+	data["md5"] = fileMd5
+	data["group"] = Config().Group
+
+	this.retOk(c, data)
 }
 
 func (this *Server) Upload(c *gin.Context) {
@@ -234,6 +274,10 @@ func (this *Server) Download(c *gin.Context) {
 
 	fullpath := c.Param("path")
 	c.File("files/" + fullpath)
+}
+
+func (this *Server) Delete(c *gin.Context) {
+
 }
 
 func (this *Server) Index(c *gin.Context) {
@@ -290,6 +334,7 @@ func (this *Server) Run() {
 
 	router.GET("/upload.html", this.Index)
 	router.POST("/upload", this.Upload)
+	router.POST("/delete", this.Delete)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
