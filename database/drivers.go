@@ -27,7 +27,7 @@ func (this *DB) Init(path string) {
 	sql_table := `
     CREATE TABLE IF NOT EXISTS bin_file (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        md5 CHAR(32) NULL,
+        md5 CHAR(32) NULL UNIQUE,
         path TEXT NULL,
         node_num INT NULL,
         node TEXT NULL,
