@@ -36,6 +36,8 @@ func (this *DB) Init(path string) {
     );
 `
 	this.db.Exec(sql_table)
+
+	this.db.Exec("create index bin_file_md5 on bin_file(md5);")
 }
 
 func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {

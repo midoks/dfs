@@ -277,17 +277,40 @@ func (this *Server) Download(c *gin.Context) {
 }
 
 func (this *Server) Delete(c *gin.Context) {
-
+	md5 := c.PostForm("md5")
+	data, find := this.db.FindFileByMd5(md5)
+	if find {
+		os.Remove(data.Path)
+		this.db.DeleteRowById(data.Id)
+		this.retOk(c, "file deleted successfully!")
+	}
+	this.retFail(c, "file does not exist!")
 }
 
 func (this *Server) Search(c *gin.Context) {
+	md5 := c.PostForm("md5")
+	data, find := this.db.FindFileByMd5(md5)
+	if find {
+		r := make(map[string]interface{})
+		r["group"] = Config().Group
+		r["path"] = data.Path
+		this.retOk(c, r)
+	}
+	this.retFail(c, "file does not exist!")
 
-	data := make(map[string]interface{})
-	data["group"] = Config().Group
-	this.retOk(c, data)
 }
 
 func (this *Server) CheckFileExists(c *gin.Context) {
+	md5 := c.PostForm("md5")
+	_, find := this.db.FindFileByMd5(md5)
+	if find {
+		this.retOk(c, "ok")
+		return
+	}
+	this.retFail(c, "not find!")
+}
+
+func (this *Server) SyncFile(c *gin.Context) {
 
 }
 
@@ -351,11 +374,13 @@ func (this *Server) Run() {
 	}
 
 	router.GET("/upload.html", this.Index)
+	router.GET("/status", this.Status)
+
 	router.POST("/upload", this.Upload)
 	router.POST("/delete", this.Delete)
 	router.POST("/serach", this.Search)
 	router.POST("/check_file_exists", this.CheckFileExists)
-	router.GET("/status", this.Status)
+	router.POST("/sync_files", this.SyncFile)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
