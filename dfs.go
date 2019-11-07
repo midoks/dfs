@@ -224,7 +224,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 			this.retFail(c, "upload fail!")
 			return
 		}
-		this.db.AddFileRow(fileMd5, outPath, "attr", time.Now().Format("2006-01-02T15:04:05Z"))
+		this.db.AddFileRow(fileMd5, outPath, 1, "attr")
 	}
 
 	data := make(map[string]interface{})
@@ -280,6 +280,25 @@ func (this *Server) Delete(c *gin.Context) {
 
 }
 
+func (this *Server) Search(c *gin.Context) {
+
+	data := make(map[string]interface{})
+	data["group"] = Config().Group
+	this.retOk(c, data)
+}
+
+func (this *Server) CheckFileExists(c *gin.Context) {
+
+}
+
+func (this *Server) Status(c *gin.Context) {
+
+	data := make(map[string]interface{})
+	data["peers"] = Config().Peers
+
+	this.retOk(c, data)
+}
+
 func (this *Server) Index(c *gin.Context) {
 	var (
 		uploadUrl    string
@@ -329,12 +348,14 @@ func (this *Server) Run() {
 		router.GET(fmt.Sprintf("%s", "/"), this.Download)
 		router.GET(fmt.Sprintf("%s", groupRoute), this.Download)
 		router.GET(fmt.Sprintf("%s/*path", groupRoute), this.Download)
-		router.POST(fmt.Sprintf("%s/*path", groupRoute), this.Download)
 	}
 
 	router.GET("/upload.html", this.Index)
 	router.POST("/upload", this.Upload)
 	router.POST("/delete", this.Delete)
+	router.POST("/serach", this.Search)
+	router.POST("/check_file_exists", this.CheckFileExists)
+	router.GET("/status", this.Status)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)

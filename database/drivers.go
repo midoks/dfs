@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
+	"time"
 )
 
 type DB struct {
@@ -61,16 +62,49 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
 	return di, false
 }
 
-func (this *DB) AddFileRow(md5, path, attr, created string) error {
+func (this *DB) AddFileRow(md5, path string, node_num int, attr string) error {
 	var (
 		err  error
 		stmt *sql.Stmt
 	)
-	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,path,attr,created) values(?,?,?,?)")
+	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,path,node_num,attr,created) values(?,?,?,?)")
 	if err != nil {
 		return err
 	}
-	_, err = stmt.Exec(md5, path, attr, created)
+	created := time.Now().Format("2006-01-02T15:04:05Z")
+	_, err = stmt.Exec(md5, path, node_num, attr, created)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (this *DB) DeleteRowById(id int) error {
+	var (
+		err  error
+		stmt *sql.Stmt
+	)
+	stmt, err = this.db.Prepare("DELETE FROM bin_file where id=?")
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (this *DB) DeleteRowByMd5(md5 int) error {
+	var (
+		err  error
+		stmt *sql.Stmt
+	)
+	stmt, err = this.db.Prepare("DELETE FROM bin_file where md5=?")
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(md5)
 	if err != nil {
 		return err
 	}
