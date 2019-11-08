@@ -64,17 +64,17 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
 	return di, false
 }
 
-func (this *DB) AddFileRow(md5, path string, node_num int, attr string) error {
+func (this *DB) AddFileRow(md5, path string, node_num int, node, attr string) error {
 	var (
 		err  error
 		stmt *sql.Stmt
 	)
-	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,path,node_num,attr,created) values(?,?,?,?)")
+	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,path,node_num,node,attr,created) values(?,?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
 	created := time.Now().Format("2006-01-02T15:04:05Z")
-	_, err = stmt.Exec(md5, path, node_num, attr, created)
+	_, err = stmt.Exec(md5, path, node_num, node, attr, created)
 	if err != nil {
 		return err
 	}

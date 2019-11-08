@@ -6,6 +6,7 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	// _ "github.com/mattn/go-sqlite3"
+	"encoding/json"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"github.com/midoks/godfs/database"
@@ -63,6 +64,20 @@ func NewServer() *Server {
 
 func Config() *config.GloablConfig {
 	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
+}
+
+func GetOtherPeers() []string {
+
+	npeers := []string{}
+	peers := Config().Peers
+	host := Config().Host
+	for i := 0; i < len(peers); i++ {
+		if host == peers[i] {
+			continue
+		}
+		npeers = append(npeers, peers[i])
+	}
+	return npeers
 }
 
 func init() {
@@ -224,9 +239,17 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 			this.retFail(c, "upload fail!")
 			return
 		}
-		this.db.AddFileRow(fileMd5, outPath, 1, "attr")
-	}
+		outPath = strings.Replace(outPath, STORE_DIR+"/", "", 1)
 
+		node_data := [...]string{Config().Host}
+		node, _ := json.Marshal(node_data)
+		fmt.Println(string(node))
+		err = this.db.AddFileRow(fileMd5, outPath, 1, string(node), "attr")
+		fmt.Println(err)
+		go this.AyncUpload(fileMd5)
+
+	}
+	GetOtherPeers()
 	data := make(map[string]interface{})
 	data["size"] = file.Size
 	data["src"] = outPath
@@ -235,6 +258,11 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 	data["group"] = Config().Group
 
 	this.retOk(c, data)
+}
+
+func (this *Server) AyncUpload(md5 string) {
+	fmt.Println("AyncUpload:", md5)
+
 }
 
 func (this *Server) Upload(c *gin.Context) {
