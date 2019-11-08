@@ -6,12 +6,16 @@ import (
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
 	// _ "github.com/mattn/go-sqlite3"
+	"bytes"
 	"encoding/json"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"github.com/midoks/godfs/database"
+	"io"
+	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -50,14 +54,22 @@ type QueueUploadChan struct {
 	done    chan bool
 }
 
+type QueueCheckChan struct {
+	c    *gin.Context
+	done chan bool
+}
+
 type Server struct {
+	db *database.DB
+
 	queueUpload chan QueueUploadChan
-	db          *database.DB
+	queueCheck  chan QueueCheckChan
 }
 
 func NewServer() *Server {
 	var srv = &Server{
 		queueUpload: make(chan QueueUploadChan, 100),
+		queueCheck:  make(chan QueueCheckChan, 100),
 	}
 	return srv
 }
@@ -135,6 +147,11 @@ func (this *Server) initComponent() {
 			Config().UploadWorker = 8
 		}
 	}
+
+	if Config().CheckWorker == 0 {
+		Config().CheckWorker = 4
+	}
+
 	if Config().UploadQueueSize == 0 {
 		Config().UploadQueueSize = 200
 	}
@@ -243,13 +260,11 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 
 		node_data := [...]string{Config().Host}
 		node, _ := json.Marshal(node_data)
-		fmt.Println(string(node))
 		err = this.db.AddFileRow(fileMd5, outPath, 1, string(node), "attr")
 		fmt.Println(err)
 		go this.AyncUpload(fileMd5)
 
 	}
-	GetOtherPeers()
 	data := make(map[string]interface{})
 	data["size"] = file.Size
 	data["src"] = outPath
@@ -263,11 +278,78 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 func (this *Server) AyncUpload(md5 string) {
 	fmt.Println("AyncUpload:", md5)
 
+	findData, _ := this.db.FindFileByMd5(md5)
+	nodeSave := Config().NodeSave
+
 	peers := GetOtherPeers()
-	for i := 0; i < len(peers); i++ {
-		fmt.Println(peers[i])
+	if (nodeSave - 1) < len(peers) {
+		peers = peers[0 : nodeSave-1]
 	}
 
+	for i := 0; i < len(peers); i++ {
+
+		isExists := CheckFileExists(peers[0]+"/check_file_exists", md5)
+
+		fmt.Println(isExists)
+
+		bodyBuffer := &bytes.Buffer{}
+		bodyWriter := multipart.NewWriter(bodyBuffer)
+		filePath := fmt.Sprintf(STORE_DIR+"/%s", findData.Path)
+
+		fileWriter, _ := bodyWriter.CreateFormFile("file", filePath)
+
+		file, _ := os.Open(filePath)
+		defer file.Close()
+		io.Copy(fileWriter, file)
+
+		bodyWriter.WriteField("path", findData.Path)
+		bodyWriter.WriteField("md5", findData.Md5)
+		contentType := bodyWriter.FormDataContentType()
+		bodyWriter.Close()
+
+		resp, _ := http.Post(peers[0]+"/sync_files", contentType, bodyBuffer)
+		defer resp.Body.Close()
+
+		resp_body, _ := ioutil.ReadAll(resp.Body)
+
+		fmt.Println(resp.Status)
+		fmt.Println(string(resp_body))
+		fmt.Println(peers[i])
+	}
+}
+
+func (this *Server) SyncFile(c *gin.Context) {
+	var (
+		err error
+	)
+
+	file, _ := c.FormFile("file")
+	path := c.PostForm("path")
+	md5 := c.PostForm("md5")
+
+	mPath := filepath.Dir(path)
+	folder := fmt.Sprintf(STORE_DIR+"/%s", mPath)
+	if f, _ := common.FileExists(mPath); !f {
+		os.MkdirAll(folder, 0777)
+	}
+
+	outPath := fmt.Sprintf(STORE_DIR+"/%s", path)
+	c.SaveUploadedFile(file, outPath)
+
+	if err != nil {
+		this.retFail(c, "upload fail!")
+		return
+	}
+
+	node_data := [...]string{Config().Host}
+	node, _ := json.Marshal(node_data)
+
+	err = this.db.AddFileRow(md5, path, 1, string(node), "attr")
+	if err != nil {
+		this.retFail(c, "add db data fail!")
+	}
+
+	this.retOk(c, "sync file ok!")
 }
 
 func (this *Server) Upload(c *gin.Context) {
@@ -333,18 +415,33 @@ func (this *Server) Search(c *gin.Context) {
 
 }
 
+func (this *Server) initCheckTask() {
+	checkFunc := func() {
+		for {
+			task := <-this.queueCheck
+			task.done <- true
+		}
+	}
+	for i := 0; i < Config().CheckWorker; i++ {
+		go checkFunc()
+	}
+}
+
+func CheckFileExists(post_url, md5 string) bool {
+	resp, err := http.PostForm(post_url, url.Values{"md5": {md5}})
+
+	fmt.Println(resp, err)
+	return false
+}
+
 func (this *Server) CheckFileExists(c *gin.Context) {
 	md5 := c.PostForm("md5")
-	_, find := this.db.FindFileByMd5(md5)
+	data, find := this.db.FindFileByMd5(md5)
 	if find {
-		this.retOk(c, "ok")
+		this.retOk(c, data)
 		return
 	}
 	this.retFail(c, "not find!")
-}
-
-func (this *Server) SyncFile(c *gin.Context) {
-
 }
 
 func (this *Server) Status(c *gin.Context) {
@@ -389,6 +486,7 @@ func (this *Server) Index(c *gin.Context) {
 func (this *Server) Run() {
 
 	go this.initUploadTask()
+	go this.initCheckTask()
 
 	router := gin.Default()
 

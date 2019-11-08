@@ -17,6 +17,8 @@ const (
 	"PeerID": "集群内唯一,请使用0-9的单字符，默认自动生成",
 	"peer_id": "%s",
 	"本主机地址": "本机http地址,默认自动生成(注意端口必须与addr中的端口一致），必段为内网，自动生成不为内网请自行修改，下同",
+	"数据保存份数":"默认1,通常至少为2"
+	"node_save":1,
 	"host": "%s",
 	"集群": "集群列表,注意为了高可用，IP必须不能是同一个,同一不会自动备份，且不能为127.0.0.1,且必须为内网IP，默认自动生成",
 	"peers": ["%s"],
@@ -97,6 +99,7 @@ type Mail struct {
 type GloablConfig struct {
 	Addr                 string   `json:"addr"`
 	Peers                []string `json:"peers"`
+	NodeSave             int      `json:"node_save"`
 	Group                string   `json:"group"`
 	RenameFile           bool     `json:"rename_file"`
 	ShowDir              bool     `json:"show_dir"`
@@ -140,6 +143,7 @@ type GloablConfig struct {
 	SyncWorker           int      `json:"sync_worker"`
 	UploadWorker         int      `json:"upload_worker"`
 	UploadQueueSize      int      `json:"upload_queue_size"`
+	CheckWorker          int      `json:"check_worker"`
 	RetryCount           int      `json:"retry_count"`
 }
 
