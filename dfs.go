@@ -263,6 +263,11 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 func (this *Server) AyncUpload(md5 string) {
 	fmt.Println("AyncUpload:", md5)
 
+	peers := GetOtherPeers()
+	for i := 0; i < len(peers); i++ {
+		fmt.Println(peers[i])
+	}
+
 }
 
 func (this *Server) Upload(c *gin.Context) {
