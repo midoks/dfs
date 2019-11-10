@@ -1,13 +1,11 @@
 package main
 
 import (
-	// "database/sql"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	log "github.com/cihub/seelog"
 	"github.com/gin-gonic/gin"
-	// _ "github.com/mattn/go-sqlite3"
-	"bytes"
-	"encoding/json"
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"github.com/midoks/godfs/database"
@@ -153,7 +151,7 @@ func checkFileExists(post_url, md5 string) bool {
 	return false
 }
 
-func fileUpload(postUrl string, info *database.BinFile) bool {
+func fileAsyncUpload(postUrl, groupMd5 string, info *database.BinFile) bool {
 
 	bodyBuffer := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(bodyBuffer)
@@ -167,6 +165,8 @@ func fileUpload(postUrl string, info *database.BinFile) bool {
 
 	bodyWriter.WriteField("path", info.Path)
 	bodyWriter.WriteField("md5", info.Md5)
+	bodyWriter.WriteField("group_md5", groupMd5)
+
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
@@ -356,7 +356,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		node, _ := json.Marshal(node_data)
 		err = this.db.AddFileRow(fileMd5, groupId, outPath, 1, string(node), "attr")
 		fmt.Println(err)
-		go this.AyncUpload(fileMd5)
+		go this.AsyncUpload(fileMd5, groupMd5)
 
 	}
 	data := make(map[string]interface{})
@@ -369,8 +369,8 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 	this.retOk(c, data)
 }
 
-func (this *Server) AyncUpload(md5 string) {
-	fmt.Println("AyncUpload:", md5)
+func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
+	fmt.Println("AyncUpload:", md5, groupMd5)
 
 	findData, _ := this.db.FindFileByMd5(md5)
 	nodeSave := Config().NodeSave
@@ -384,11 +384,11 @@ func (this *Server) AyncUpload(md5 string) {
 
 		isExists := checkFileExists(peers[i]+"/check_file_exists", md5)
 		if !isExists {
-			isUpload := fileUpload(peers[i]+"/sync_file", findData)
+			isUpload := fileAsyncUpload(peers[i]+"/async_file", groupMd5, findData)
 			if !isUpload {
 				continue
 			}
-			isAsync := asyncFileInfo(peers[i]+"/sync_file_info", findData)
+			isAsync := asyncFileInfo(peers[i]+"/async_file_info", findData)
 			if !isAsync {
 				continue
 			}
@@ -415,19 +415,26 @@ func (this *Server) AyncUpload(md5 string) {
 	}
 }
 
-func (this *Server) SyncFile(c *gin.Context) {
+func (this *Server) AsyncFile(c *gin.Context) {
 	var (
-		err error
+		err     error
+		groupId int64
 	)
 
 	file, _ := c.FormFile("file")
 	path := c.PostForm("path")
 	md5 := c.PostForm("md5")
+	groupMd5 := c.PostForm("group_md5")
 
 	mPath := filepath.Dir(path)
 	folder := fmt.Sprintf(STORE_DIR+"/%s", mPath)
 	if f, _ := common.FileExists(mPath); !f {
 		os.MkdirAll(folder, 0777)
+	}
+
+	groupId = 0
+	if groupMd5 != "" {
+		groupId = this.db.FindFileGroupGetId(groupMd5)
 	}
 
 	outPath := fmt.Sprintf(STORE_DIR+"/%s", path)
@@ -441,7 +448,7 @@ func (this *Server) SyncFile(c *gin.Context) {
 	node_data := [...]string{Config().Host}
 	node, _ := json.Marshal(node_data)
 
-	err = this.db.AddFileRow(md5, 0, path, 1, string(node), "attr")
+	err = this.db.AddFileRow(md5, groupId, path, 1, string(node), "attr")
 	if err != nil {
 		this.retFail(c, "add db data fail!")
 	}
@@ -449,7 +456,7 @@ func (this *Server) SyncFile(c *gin.Context) {
 	this.retOk(c, "sync file successfully!")
 }
 
-func (this *Server) SyncFileInfo(c *gin.Context) {
+func (this *Server) AsyncFileInfo(c *gin.Context) {
 
 	node := c.PostForm("node")
 	md5 := c.PostForm("md5")
@@ -636,9 +643,9 @@ func (this *Server) Run() {
 	router.POST("/delete", this.Delete)
 	router.POST("/serach", this.Search)
 	router.POST("/check_file_exists", this.CheckFileExists)
-	router.POST("/sync_file", this.SyncFile)
-	router.POST("/sync_file_info", this.SyncFileInfo)
-	router.POST("/transfer", this.SyncFileInfo)
+	router.POST("/async_file", this.AsyncFile)
+	router.POST("/async_file_info", this.AsyncFileInfo)
+	router.POST("/transfer", this.AsyncFileInfo)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
