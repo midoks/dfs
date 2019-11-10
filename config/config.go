@@ -163,7 +163,7 @@ func Parse(filePath string) unsafe.Pointer {
 	if err := json.Unmarshal(data, &c); err != nil {
 		panic(fmt.Sprintln("file path:", filePath, "json unmarshal error:", err))
 	}
-	log.Info(c)
+	// log.Info(c)
 
 	var ptr unsafe.Pointer
 	atomic.StorePointer(&ptr, unsafe.Pointer(&c))

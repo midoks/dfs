@@ -59,6 +59,12 @@ type QueueCheckChan struct {
 	done chan bool
 }
 
+type ReturnJsonData struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"msg"`
+	Data interface{} `json:"data"`
+}
+
 type Server struct {
 	db *database.DB
 
@@ -128,6 +134,80 @@ func init() {
 	server.initComponent()
 	server.initDb()
 	fmt.Println("init end")
+}
+
+func checkFileExists(post_url, md5 string) bool {
+
+	resp, _ := http.PostForm(post_url, url.Values{"md5": {md5}})
+	defer resp.Body.Close()
+	respBody, _ := ioutil.ReadAll(resp.Body)
+
+	m := ReturnJsonData{}
+
+	err := json.Unmarshal([]byte(string(respBody)), &m)
+	if err == nil {
+		if m.Code == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func fileUpload(postUrl string, info *database.BinFile) bool {
+
+	bodyBuffer := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuffer)
+
+	filePath := fmt.Sprintf(STORE_DIR+"/%s", info.Path)
+	fileWriter, _ := bodyWriter.CreateFormFile("file", filePath)
+
+	file, _ := os.Open(filePath)
+	defer file.Close()
+	io.Copy(fileWriter, file)
+
+	bodyWriter.WriteField("path", info.Path)
+	bodyWriter.WriteField("md5", info.Md5)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
+	defer resp.Body.Close()
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+
+	m := ReturnJsonData{}
+	err := json.Unmarshal([]byte(string(respBody)), &m)
+	if err == nil {
+		if m.Code == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func asyncFileInfo(postUrl string, info *database.BinFile) bool {
+
+	bodyBuffer := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuffer)
+
+	bodyWriter.WriteField("node", Config().Host)
+	bodyWriter.WriteField("md5", info.Md5)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
+	defer resp.Body.Close()
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+
+	m := ReturnJsonData{}
+	err := json.Unmarshal([]byte(string(respBody)), &m)
+	if err == nil {
+		if m.Code == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (this *Server) initComponent() {
@@ -210,21 +290,35 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 		folder  string
 		outPath string
 		fileMd5 string
+		groupId int64
 	)
 
-	folder = time.Now().Format("20060102/15/04")
-
-	scene := c.PostForm("scene")
-	if scene != "" {
-		folder = fmt.Sprintf(STORE_DIR+"/%s/%s", scene, folder)
-	} else {
-		folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
-	}
-
 	file, err = c.FormFile("file")
-
 	if err != nil {
 		this.retFail(c, "upload request fail!")
+	}
+
+	groupMd5 := c.PostForm("group_md5")
+	groupId = 0
+	if groupMd5 != "" {
+		groupId = this.db.FindFileGroupGetId(groupMd5)
+	}
+
+	scene := c.PostForm("scene")
+	fixedDir := c.PostForm("fixed_dir")
+	if fixedDir == "" {
+		folder = time.Now().Format("20060102/15/04")
+		if scene != "" {
+			folder = fmt.Sprintf(STORE_DIR+"/%s/%s", scene, folder)
+		} else {
+			folder = fmt.Sprintf(STORE_DIR+"/%s", folder)
+		}
+	} else {
+		if scene != "" {
+			folder = fmt.Sprintf(STORE_DIR+"/%s/%s", scene, fixedDir)
+		} else {
+			folder = fmt.Sprintf(STORE_DIR+"/%s", fixedDir)
+		}
 	}
 
 	_, fname = filepath.Split(file.Filename)
@@ -260,7 +354,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 
 		node_data := [...]string{Config().Host}
 		node, _ := json.Marshal(node_data)
-		err = this.db.AddFileRow(fileMd5, outPath, 1, string(node), "attr")
+		err = this.db.AddFileRow(fileMd5, groupId, outPath, 1, string(node), "attr")
 		fmt.Println(err)
 		go this.AyncUpload(fileMd5)
 
@@ -288,33 +382,36 @@ func (this *Server) AyncUpload(md5 string) {
 
 	for i := 0; i < len(peers); i++ {
 
-		isExists := CheckFileExists(peers[0]+"/check_file_exists", md5)
+		isExists := checkFileExists(peers[i]+"/check_file_exists", md5)
+		if !isExists {
+			isUpload := fileUpload(peers[i]+"/sync_file", findData)
+			if !isUpload {
+				continue
+			}
+			isAsync := asyncFileInfo(peers[i]+"/sync_file_info", findData)
+			if !isAsync {
+				continue
+			}
+		}
 
-		fmt.Println(isExists)
+		var nodeObj []string
+		err := json.Unmarshal([]byte(findData.Node), &nodeObj)
+		if err == nil {
+			nodeObj = append(nodeObj, peers[i])
 
-		bodyBuffer := &bytes.Buffer{}
-		bodyWriter := multipart.NewWriter(bodyBuffer)
-		filePath := fmt.Sprintf(STORE_DIR+"/%s", findData.Path)
+			nodeObjStr, _ := json.Marshal(nodeObj)
+			findData.Node = string(nodeObjStr)
+			findData.NodeNum = findData.NodeNum + 1
+			err = this.db.UpdateFileNode(findData)
+			if err == nil {
+				fmt.Println("ok!!!")
+				return
+			} else {
 
-		fileWriter, _ := bodyWriter.CreateFormFile("file", filePath)
-
-		file, _ := os.Open(filePath)
-		defer file.Close()
-		io.Copy(fileWriter, file)
-
-		bodyWriter.WriteField("path", findData.Path)
-		bodyWriter.WriteField("md5", findData.Md5)
-		contentType := bodyWriter.FormDataContentType()
-		bodyWriter.Close()
-
-		resp, _ := http.Post(peers[0]+"/sync_files", contentType, bodyBuffer)
-		defer resp.Body.Close()
-
-		resp_body, _ := ioutil.ReadAll(resp.Body)
-
-		fmt.Println(resp.Status)
-		fmt.Println(string(resp_body))
-		fmt.Println(peers[i])
+			}
+			fmt.Println("fail !!!", err)
+		}
+		fmt.Println("fail !!!")
 	}
 }
 
@@ -344,21 +441,51 @@ func (this *Server) SyncFile(c *gin.Context) {
 	node_data := [...]string{Config().Host}
 	node, _ := json.Marshal(node_data)
 
-	err = this.db.AddFileRow(md5, path, 1, string(node), "attr")
+	err = this.db.AddFileRow(md5, 0, path, 1, string(node), "attr")
 	if err != nil {
 		this.retFail(c, "add db data fail!")
 	}
 
-	this.retOk(c, "sync file ok!")
+	this.retOk(c, "sync file successfully!")
+}
+
+func (this *Server) SyncFileInfo(c *gin.Context) {
+
+	node := c.PostForm("node")
+	md5 := c.PostForm("md5")
+
+	findData, isFind := this.db.FindFileByMd5(md5)
+	if isFind {
+
+		var nodeObj []string
+		err := json.Unmarshal([]byte(findData.Node), &nodeObj)
+		if err == nil {
+			nodeObj = append(nodeObj, node)
+
+			nodeObjStr, _ := json.Marshal(nodeObj)
+			findData.Node = string(nodeObjStr)
+			findData.NodeNum = findData.NodeNum + 1
+			this.db.UpdateFileNode(findData)
+		}
+		fmt.Println(findData, node)
+		this.retOk(c, "sync file info successfully")
+		return
+	}
+	this.retFail(c, "sync file info fail!")
 }
 
 func (this *Server) Upload(c *gin.Context) {
 	var (
 		file   *multipart.FileHeader
 		folder string
+		err    error
 	)
 
-	file, _ = c.FormFile("file")
+	file, err = c.FormFile("file")
+	if err != nil {
+		this.retFail(c, "upload file does not exist!")
+		return
+	}
 	folder = time.Now().Format("20060102")
 	folder = fmt.Sprintf(STORE_DIR+"/_tmp/%s", folder)
 
@@ -386,6 +513,11 @@ func (this *Server) Download(c *gin.Context) {
 		this.Index(c)
 		return
 	}
+
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, X-Requested-By, If-Modified-Since, X-File-Name, X-File-Type, Cache-Control, Origin")
+	c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+	c.Header("Access-Control-Expose-Headers", "Authorization")
 
 	fullpath := c.Param("path")
 	c.File("files/" + fullpath)
@@ -425,13 +557,6 @@ func (this *Server) initCheckTask() {
 	for i := 0; i < Config().CheckWorker; i++ {
 		go checkFunc()
 	}
-}
-
-func CheckFileExists(post_url, md5 string) bool {
-	resp, err := http.PostForm(post_url, url.Values{"md5": {md5}})
-
-	fmt.Println(resp, err)
-	return false
 }
 
 func (this *Server) CheckFileExists(c *gin.Context) {
@@ -511,7 +636,8 @@ func (this *Server) Run() {
 	router.POST("/delete", this.Delete)
 	router.POST("/serach", this.Search)
 	router.POST("/check_file_exists", this.CheckFileExists)
-	router.POST("/sync_files", this.SyncFile)
+	router.POST("/sync_file", this.SyncFile)
+	router.POST("/sync_file_info", this.SyncFileInfo)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
