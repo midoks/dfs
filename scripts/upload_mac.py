@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 """
-下载检测
+上传DEMO
 """
 
 '''
