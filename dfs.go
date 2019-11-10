@@ -638,6 +638,7 @@ func (this *Server) Run() {
 	router.POST("/check_file_exists", this.CheckFileExists)
 	router.POST("/sync_file", this.SyncFile)
 	router.POST("/sync_file_info", this.SyncFileInfo)
+	router.POST("/transfer", this.SyncFileInfo)
 
 	fmt.Println("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
