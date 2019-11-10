@@ -120,3 +120,13 @@ func GetUUID() string {
 func MD5UUID() string {
 	return MD5(GetUUID())
 }
+
+func Contains(s string, c interface{}) bool {
+	cc := c.([]string)
+	for i := 0; i < len(cc); i++ {
+		if strings.EqualFold(s, cc[i]) {
+			return true
+		}
+	}
+	return false
+}

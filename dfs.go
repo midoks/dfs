@@ -267,19 +267,31 @@ func (this *Server) initUploadTask() {
 	}
 }
 
+func (this *Server) retData(c *gin.Context, msg string, code int, data interface{}, format string) {
+	rData := gin.H{"msg": msg, "code": code, "data": data}
+
+	list := []string{"json", "jsonp", "xml"}
+	defaultFormat := "json"
+
+	if common.Contains(format, list) {
+		defaultFormat = format
+	}
+
+	if strings.EqualFold(defaultFormat, "xml") {
+		c.XML(http.StatusOK, rData)
+	} else if strings.EqualFold(defaultFormat, "jsonp") {
+		c.JSONP(http.StatusOK, rData)
+	} else {
+		c.JSON(http.StatusOK, rData)
+	}
+}
+
 func (this *Server) retOk(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, gin.H{
-		"msg":  "ok",
-		"code": 0,
-		"data": data,
-	})
+	this.retData(c, "ok", 0, data, "json")
 }
 
 func (this *Server) retFail(c *gin.Context, msg string) {
-	c.JSON(http.StatusOK, gin.H{
-		"code": -1,
-		"msg":  msg,
-	})
+	this.retData(c, msg, -1, "", "json")
 }
 
 func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
@@ -511,6 +523,13 @@ func (this *Server) Upload(c *gin.Context) {
 	<-done
 }
 
+func (this *Server) crossOrigin(c *gin.Context) {
+	c.Header("Access-Control-Allow-Origin", "*")
+	c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, X-Requested-By, If-Modified-Since, X-File-Name, X-File-Type, Cache-Control, Origin")
+	c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+	c.Header("Access-Control-Expose-Headers", "Authorization")
+}
+
 func (this *Server) Download(c *gin.Context) {
 
 	if c.Request.RequestURI == "/" ||
@@ -521,10 +540,7 @@ func (this *Server) Download(c *gin.Context) {
 		return
 	}
 
-	c.Header("Access-Control-Allow-Origin", "*")
-	c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Depth, User-Agent, X-File-Size, X-Requested-With, X-Requested-By, If-Modified-Since, X-File-Name, X-File-Type, Cache-Control, Origin")
-	c.Header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-	c.Header("Access-Control-Expose-Headers", "Authorization")
+	this.crossOrigin(c)
 
 	fullpath := c.Param("path")
 	c.File("files/" + fullpath)
@@ -542,16 +558,36 @@ func (this *Server) Delete(c *gin.Context) {
 }
 
 func (this *Server) Search(c *gin.Context) {
-	md5 := c.PostForm("md5")
+
+	this.crossOrigin(c)
+
+	md5, _ := c.GetQuery("md5")
+	format, _ := c.GetQuery("format")
+
 	data, find := this.db.FindFileByMd5(md5)
+
+	fmt.Println(data)
 	if find {
-		r := make(map[string]interface{})
-		r["group"] = Config().Group
-		r["path"] = data.Path
-		this.retOk(c, r)
+		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
+		if strings.EqualFold(format, "redirect") {
+			c.Redirect(301, reqUrl)
+			return
+		}
+
+		if strings.EqualFold(format, "file") {
+			c.File("files/" + data.Path)
+			return
+		}
+
+		rData := make(map[string]interface{})
+		rData["group"] = Config().Group
+		rData["path"] = data.Path
+		rData["url"] = reqUrl
+
+		this.retData(c, "ok", 0, rData, format)
+		return
 	}
 	this.retFail(c, "file does not exist!")
-
 }
 
 func (this *Server) initCheckTask() {
@@ -638,10 +674,10 @@ func (this *Server) Run() {
 
 	router.GET("/upload.html", this.Index)
 	router.GET("/status", this.Status)
+	router.GET("/search", this.Search)
 
 	router.POST("/upload", this.Upload)
 	router.POST("/delete", this.Delete)
-	router.POST("/serach", this.Search)
 	router.POST("/check_file_exists", this.CheckFileExists)
 	router.POST("/async_file", this.AsyncFile)
 	router.POST("/async_file_info", this.AsyncFileInfo)
