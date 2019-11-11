@@ -27,6 +27,7 @@ import (
 var server *Server
 
 const (
+	DFS_VERSION                  = "0.0.1"
 	STORE_DIR_NAME               = "files"
 	LOG_DIR_NAME                 = "log"
 	DATA_DIR_NAME                = "data"
@@ -673,6 +674,35 @@ func (this *Server) AsyncSearch(c *gin.Context) {
 	this.retFail(c, "file does not exist!")
 }
 
+func (this *Server) AsyncDelete(c *gin.Context) {
+
+	md5 := c.PostForm("md5")
+
+	data, err := this.db.FindFileByMd5(md5)
+
+	if err == nil {
+		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
+		if strings.EqualFold(format, "redirect") {
+			c.Redirect(301, reqUrl)
+			return
+		}
+
+		if strings.EqualFold(format, "file") {
+			c.File("files/" + data.Path)
+			return
+		}
+
+		rData := make(map[string]interface{})
+		rData["group"] = Config().Group
+		rData["path"] = data.Path
+		rData["url"] = reqUrl
+
+		this.retData(c, "ok", 0, rData, format)
+		return
+	}
+	this.retFail(c, "file does not exist!")
+}
+
 func (this *Server) initCheckTask() {
 	checkFunc := func() {
 		for {
@@ -762,6 +792,7 @@ func (this *Server) Run() {
 	router.POST("/upload", this.Upload)
 	router.POST("/delete", this.Delete)
 
+	router.POST("/async_delete", this.AsyncDelete)
 	router.POST("/async_search", this.AsyncSearch)
 	router.POST("/check_file_exists", this.CheckFileExists)
 	router.POST("/async_file_upload", this.AsyncFileUpload)
