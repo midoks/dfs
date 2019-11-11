@@ -20,10 +20,10 @@ type BinFileGroup struct {
 type BinFile struct {
 	Id      int64
 	Md5     string
-	Path    string
 	NodeNum int
 	Node    string
-	Attr    string
+	Path    string
+	Size    int64
 	Created string
 }
 
@@ -48,7 +48,7 @@ func (this *DB) Init(path string) {
         path TEXT NULL,
         node_num INT NULL,
         node TEXT NULL,
-        attr TEXT NULL,
+        size INTEGER NULL,
         updated DATE NULL,
         created DATE NULL
     );
@@ -158,14 +158,14 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
 	)
 	di := &BinFile{}
 
-	rows, err = this.db.Query(fmt.Sprintf("select id,md5,path,node_num,node,attr,created from bin_file where md5='%s' limit 1", md5))
+	rows, err = this.db.Query(fmt.Sprintf("select id,md5,path,node_num,node,size,created from bin_file where md5='%s' limit 1", md5))
 	if err != nil {
 		return di, false
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		err = rows.Scan(&di.Id, &di.Md5, &di.Path, &di.NodeNum, &di.Node, &di.Attr, &di.Created)
+		err = rows.Scan(&di.Id, &di.Md5, &di.Path, &di.NodeNum, &di.Node, &di.Size, &di.Created)
 		if err != nil {
 			return di, false
 		}
@@ -175,17 +175,17 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
 	return di, false
 }
 
-func (this *DB) AddFileRow(md5 string, gid int64, path string, node_num int, node, attr string) error {
+func (this *DB) AddFileRow(md5 string, gid int64, path string, node_num int, node string, size int64) error {
 	var (
 		err  error
 		stmt *sql.Stmt
 	)
-	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,gid,path,node_num,node,attr,created) values(?,?,?,?,?,?,?)")
+	stmt, err = this.db.Prepare("INSERT INTO bin_file(md5,gid,path,node_num,node,size,created) values(?,?,?,?,?,?,?)")
 	if err != nil {
 		return err
 	}
 	created := time.Now().Format("2006-01-02T15:04:05Z")
-	_, err = stmt.Exec(md5, gid, path, node_num, node, attr, created)
+	_, err = stmt.Exec(md5, gid, path, node_num, node, size, created)
 	if err != nil {
 		return err
 	}

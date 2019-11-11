@@ -366,7 +366,7 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 
 		node_data := [...]string{Config().Host}
 		node, _ := json.Marshal(node_data)
-		err = this.db.AddFileRow(fileMd5, groupId, outPath, 1, string(node), "attr")
+		err = this.db.AddFileRow(fileMd5, groupId, outPath, 1, string(node), file.Size)
 		fmt.Println(err)
 		go this.AsyncUpload(fileMd5, groupMd5)
 
@@ -396,7 +396,7 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 
 		isExists := checkFileExists(peers[i]+"/check_file_exists", md5)
 		if !isExists {
-			isUpload := fileAsyncUpload(peers[i]+"/async_file", groupMd5, findData)
+			isUpload := fileAsyncUpload(peers[i]+"/async_file_upload", groupMd5, findData)
 			if !isUpload {
 				continue
 			}
@@ -427,7 +427,7 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 	}
 }
 
-func (this *Server) AsyncFile(c *gin.Context) {
+func (this *Server) AsyncFileUpload(c *gin.Context) {
 	var (
 		err     error
 		groupId int64
@@ -460,7 +460,7 @@ func (this *Server) AsyncFile(c *gin.Context) {
 	node_data := [...]string{Config().Host}
 	node, _ := json.Marshal(node_data)
 
-	err = this.db.AddFileRow(md5, groupId, path, 1, string(node), "attr")
+	err = this.db.AddFileRow(md5, groupId, path, 1, string(node), file.Size)
 	if err != nil {
 		this.retFail(c, "add db data fail!")
 	}
@@ -531,6 +531,7 @@ func (this *Server) crossOrigin(c *gin.Context) {
 }
 
 func (this *Server) Download(c *gin.Context) {
+	this.crossOrigin(c)
 
 	if c.Request.RequestURI == "/" ||
 		c.Request.RequestURI == "" ||
@@ -539,8 +540,6 @@ func (this *Server) Download(c *gin.Context) {
 		this.Index(c)
 		return
 	}
-
-	this.crossOrigin(c)
 
 	fullpath := c.Param("path")
 	c.File("files/" + fullpath)
@@ -551,14 +550,17 @@ func (this *Server) Delete(c *gin.Context) {
 	data, find := this.db.FindFileByMd5(md5)
 	if find {
 		os.Remove(data.Path)
-		this.db.DeleteRowById(data.Id)
-		this.retOk(c, "file deleted successfully!")
+		err := this.db.DeleteRowById(data.Id)
+		if err == nil {
+			this.retOk(c, "file deleted successfully!")
+		}
+		this.retFail(c, "file deleted successfully!")
+		return
 	}
 	this.retFail(c, "file does not exist!")
 }
 
 func (this *Server) Search(c *gin.Context) {
-
 	this.crossOrigin(c)
 
 	md5, _ := c.GetQuery("md5")
@@ -566,7 +568,36 @@ func (this *Server) Search(c *gin.Context) {
 
 	data, find := this.db.FindFileByMd5(md5)
 
-	fmt.Println(data)
+	if find {
+		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
+		if strings.EqualFold(format, "redirect") {
+			c.Redirect(301, reqUrl)
+			return
+		}
+
+		if strings.EqualFold(format, "file") {
+			c.File("files/" + data.Path)
+			return
+		}
+
+		rData := make(map[string]interface{})
+		rData["group"] = Config().Group
+		rData["path"] = data.Path
+		rData["url"] = reqUrl
+
+		this.retData(c, "ok", 0, rData, format)
+		return
+	}
+	this.retFail(c, "file does not exist!")
+}
+
+func (this *Server) AsyncSearch(c *gin.Context) {
+
+	md5, _ := c.GetQuery("md5")
+	format, _ := c.GetQuery("format")
+
+	data, find := this.db.FindFileByMd5(md5)
+
 	if find {
 		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
 		if strings.EqualFold(format, "redirect") {
@@ -678,9 +709,12 @@ func (this *Server) Run() {
 
 	router.POST("/upload", this.Upload)
 	router.POST("/delete", this.Delete)
+
+	router.POST("/async_search", this.AsyncSearch)
 	router.POST("/check_file_exists", this.CheckFileExists)
-	router.POST("/async_file", this.AsyncFile)
+	router.POST("/async_file_upload", this.AsyncFileUpload)
 	router.POST("/async_file_info", this.AsyncFileInfo)
+
 	router.POST("/transfer", this.AsyncFileInfo)
 
 	fmt.Println("Listen Port on", Config().Addr)
