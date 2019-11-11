@@ -151,7 +151,7 @@ func (this *DB) DeleteFileGroupByMd5(md5 string) error {
 	return nil
 }
 
-func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
+func (this *DB) FindFileByMd5(md5 string) (*BinFile, error) {
 	var (
 		err  error
 		rows *sql.Rows
@@ -160,19 +160,15 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, bool) {
 
 	rows, err = this.db.Query(fmt.Sprintf("select id,md5,path,node_num,node,size,created from bin_file where md5='%s' limit 1", md5))
 	if err != nil {
-		return di, false
+		return di, err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		err = rows.Scan(&di.Id, &di.Md5, &di.Path, &di.NodeNum, &di.Node, &di.Size, &di.Created)
-		if err != nil {
-			return di, false
-		}
-		return di, true
+		return di, err
 	}
-
-	return di, false
+	return di, err
 }
 
 func (this *DB) AddFileRow(md5 string, gid int64, path string, node_num int, node string, size int64) error {

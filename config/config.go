@@ -85,7 +85,9 @@ const (
 	"是否开启断点续传": "默认开启",
 	"enable_tus": true,
 	"同步单一文件超时时间（单位秒）": "默认为0,程序自动计算，在特殊情况下，自已设定",
-	"sync_timeout": 0
+	"sync_timeout": 0,
+	"是否开启程序调试","默认不开启",
+	"debug":false
 }
 	`
 )
@@ -145,6 +147,7 @@ type GloablConfig struct {
 	UploadQueueSize      int      `json:"upload_queue_size"`
 	CheckWorker          int      `json:"check_worker"`
 	RetryCount           int      `json:"retry_count"`
+	Debug                bool     `json:"debug"`
 }
 
 func Parse(filePath string) unsafe.Pointer {

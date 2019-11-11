@@ -82,7 +82,17 @@ func Config() *config.GloablConfig {
 	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
 }
 
-func GetOtherPeers() []string {
+func dPrint(args ...interface{}) {
+	if Config().Debug {
+		fmt.Println("[", Config().Host, "]:[")
+		for i := 0; i < len(args); i++ {
+			fmt.Print(args[i])
+		}
+		fmt.Println("]")
+	}
+}
+
+func getOtherPeers() []string {
 
 	npeers := []string{}
 	peers := Config().Peers
@@ -131,7 +141,7 @@ func init() {
 	server = NewServer()
 	server.initComponent()
 	server.initDb()
-	fmt.Println("init end")
+	dPrint("init", "init end")
 }
 
 func checkFileExists(post_url, md5 string) bool {
@@ -208,6 +218,25 @@ func asyncFileInfo(postUrl string, info *database.BinFile) bool {
 		}
 	}
 	return false
+}
+
+func asyncSearch(postUrl string, md5 string, format string) (ReturnJsonData, error) {
+	bodyBuffer := &bytes.Buffer{}
+	bodyWriter := multipart.NewWriter(bodyBuffer)
+
+	bodyWriter.WriteField("format", Config().Host)
+	bodyWriter.WriteField("md5", md5)
+	contentType := bodyWriter.FormDataContentType()
+	bodyWriter.Close()
+
+	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
+	defer resp.Body.Close()
+
+	respBody, _ := ioutil.ReadAll(resp.Body)
+
+	m := ReturnJsonData{}
+	err := json.Unmarshal([]byte(string(respBody)), &m)
+	return m, err
 }
 
 func (this *Server) initComponent() {
@@ -382,12 +411,13 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 }
 
 func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
-	fmt.Println("AyncUpload:", md5, groupMd5)
+	dPrint("AyncUpload:", md5, groupMd5)
 
 	findData, _ := this.db.FindFileByMd5(md5)
 	nodeSave := Config().NodeSave
 
-	peers := GetOtherPeers()
+	peers := getOtherPeers()
+	dPrint("AyncUpload:", peers)
 	if (nodeSave - 1) < len(peers) {
 		peers = peers[0 : nodeSave-1]
 	}
@@ -400,10 +430,11 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 			if !isUpload {
 				continue
 			}
-			isAsync := asyncFileInfo(peers[i]+"/async_file_info", findData)
-			if !isAsync {
-				continue
-			}
+		}
+
+		isAsync := asyncFileInfo(peers[i]+"/async_file_info", findData)
+		if !isAsync {
+			continue
 		}
 
 		var nodeObj []string
@@ -421,9 +452,9 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 			} else {
 
 			}
-			fmt.Println("fail !!!", err)
+			dPrint("fail !!!", err)
 		}
-		fmt.Println("fail !!!")
+		dPrint("fail !!!")
 	}
 }
 
@@ -473,8 +504,8 @@ func (this *Server) AsyncFileInfo(c *gin.Context) {
 	node := c.PostForm("node")
 	md5 := c.PostForm("md5")
 
-	findData, isFind := this.db.FindFileByMd5(md5)
-	if isFind {
+	findData, err := this.db.FindFileByMd5(md5)
+	if err == nil {
 
 		var nodeObj []string
 		err := json.Unmarshal([]byte(findData.Node), &nodeObj)
@@ -547,8 +578,8 @@ func (this *Server) Download(c *gin.Context) {
 
 func (this *Server) Delete(c *gin.Context) {
 	md5 := c.PostForm("md5")
-	data, find := this.db.FindFileByMd5(md5)
-	if find {
+	data, err := this.db.FindFileByMd5(md5)
+	if err == nil {
 		os.Remove(data.Path)
 		err := this.db.DeleteRowById(data.Id)
 		if err == nil {
@@ -566,9 +597,9 @@ func (this *Server) Search(c *gin.Context) {
 	md5, _ := c.GetQuery("md5")
 	format, _ := c.GetQuery("format")
 
-	data, find := this.db.FindFileByMd5(md5)
+	data, err := this.db.FindFileByMd5(md5)
 
-	if find {
+	if err == nil {
 		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
 		if strings.EqualFold(format, "redirect") {
 			c.Redirect(301, reqUrl)
@@ -589,17 +620,29 @@ func (this *Server) Search(c *gin.Context) {
 		return
 	}
 
+	peers := getOtherPeers()
+	for i := 0; i < len(peers); i++ {
+		fmt.Println(peers[i] + "/async_search")
+		tData, err := asyncSearch(peers[i]+"/async_search", md5, format)
+		if err != nil {
+			continue
+		}
+
+		fmt.Println(tData)
+
+	}
+
 	this.retFail(c, "file does not exist!")
 }
 
 func (this *Server) AsyncSearch(c *gin.Context) {
 
-	md5, _ := c.GetQuery("md5")
-	format, _ := c.GetQuery("format")
+	md5 := c.PostForm("md5")
+	format := c.PostForm("format")
 
-	data, find := this.db.FindFileByMd5(md5)
+	data, err := this.db.FindFileByMd5(md5)
 
-	if find {
+	if err == nil {
 		reqUrl := fmt.Sprintf("%s/%s/%s", Config().Host, Config().Group, data.Path)
 		if strings.EqualFold(format, "redirect") {
 			c.Redirect(301, reqUrl)
@@ -636,8 +679,8 @@ func (this *Server) initCheckTask() {
 
 func (this *Server) CheckFileExists(c *gin.Context) {
 	md5 := c.PostForm("md5")
-	data, find := this.db.FindFileByMd5(md5)
-	if find {
+	data, err := this.db.FindFileByMd5(md5)
+	if err == nil {
 		this.retOk(c, data)
 		return
 	}
