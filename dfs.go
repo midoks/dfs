@@ -151,7 +151,7 @@ func checkFileExists(post_url, md5 string) bool {
 	return false
 }
 
-func fileAsyncUpload(postUrl, groupMd5 string, info *database.BinFile) bool {
+func asyncFileUpload(postUrl, groupMd5 string, info *database.BinFile) bool {
 
 	bodyBuffer := &bytes.Buffer{}
 	bodyWriter := multipart.NewWriter(bodyBuffer)
@@ -396,7 +396,7 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 
 		isExists := checkFileExists(peers[i]+"/check_file_exists", md5)
 		if !isExists {
-			isUpload := fileAsyncUpload(peers[i]+"/async_file_upload", groupMd5, findData)
+			isUpload := asyncFileUpload(peers[i]+"/async_file_upload", groupMd5, findData)
 			if !isUpload {
 				continue
 			}
@@ -588,6 +588,7 @@ func (this *Server) Search(c *gin.Context) {
 		this.retData(c, "ok", 0, rData, format)
 		return
 	}
+
 	this.retFail(c, "file does not exist!")
 }
 
