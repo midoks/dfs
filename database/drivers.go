@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
 	"time"
@@ -159,6 +160,7 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, error) {
 	di := &BinFile{}
 
 	rows, err = this.db.Query(fmt.Sprintf("select id,md5,path,node_num,node,size,created from bin_file where md5='%s' limit 1", md5))
+
 	if err != nil {
 		return di, err
 	}
@@ -166,9 +168,10 @@ func (this *DB) FindFileByMd5(md5 string) (*BinFile, error) {
 
 	for rows.Next() {
 		err = rows.Scan(&di.Id, &di.Md5, &di.Path, &di.NodeNum, &di.Node, &di.Size, &di.Created)
+
 		return di, err
 	}
-	return di, err
+	return di, errors.New("not find data!")
 }
 
 func (this *DB) AddFileRow(md5 string, gid int64, path string, node_num int, node string, size int64) error {

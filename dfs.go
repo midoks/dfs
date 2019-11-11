@@ -84,11 +84,11 @@ func Config() *config.GloablConfig {
 
 func dPrint(args ...interface{}) {
 	if Config().Debug {
-		fmt.Println("[", Config().Host, "]:[")
+		fmt.Println("[", Config().Host, "]:[start]")
 		for i := 0; i < len(args); i++ {
 			fmt.Print(args[i])
 		}
-		fmt.Println("]")
+		fmt.Println("\n[end]")
 	}
 }
 
@@ -421,18 +421,21 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 	if (nodeSave - 1) < len(peers) {
 		peers = peers[0 : nodeSave-1]
 	}
+	dPrint("AyncUpload Choose:", peers)
 
 	for i := 0; i < len(peers); i++ {
 
 		isExists := checkFileExists(peers[i]+"/check_file_exists", md5)
 		if !isExists {
 			isUpload := asyncFileUpload(peers[i]+"/async_file_upload", groupMd5, findData)
+			dPrint("AyncUpload", "isUpload", isUpload)
 			if !isUpload {
 				continue
 			}
 		}
 
 		isAsync := asyncFileInfo(peers[i]+"/async_file_info", findData)
+		dPrint("AyncUpload", "isAsync", isAsync)
 		if !isAsync {
 			continue
 		}
@@ -447,18 +450,19 @@ func (this *Server) AsyncUpload(md5 string, groupMd5 string) {
 			findData.NodeNum = findData.NodeNum + 1
 			err = this.db.UpdateFileNode(findData)
 			if err == nil {
-				fmt.Println("ok!!!")
+				dPrint("AyncUpload", "ok!!!")
 				return
 			} else {
 
 			}
-			dPrint("fail !!!", err)
+			dPrint("AyncUpload", "fail !!!", err)
 		}
-		dPrint("fail !!!")
+		dPrint("AyncUpload", "fail !!!")
 	}
 }
 
 func (this *Server) AsyncFileUpload(c *gin.Context) {
+
 	var (
 		err     error
 		groupId int64
@@ -468,6 +472,8 @@ func (this *Server) AsyncFileUpload(c *gin.Context) {
 	path := c.PostForm("path")
 	md5 := c.PostForm("md5")
 	groupMd5 := c.PostForm("group_md5")
+
+	dPrint("AsyncFileUpload", md5)
 
 	mPath := filepath.Dir(path)
 	folder := fmt.Sprintf(STORE_DIR+"/%s", mPath)
@@ -622,16 +628,18 @@ func (this *Server) Search(c *gin.Context) {
 
 	peers := getOtherPeers()
 	for i := 0; i < len(peers); i++ {
-		fmt.Println(peers[i] + "/async_search")
+		dPrint(peers[i] + "/async_search")
 		tData, err := asyncSearch(peers[i]+"/async_search", md5, format)
 		if err != nil {
 			continue
 		}
 
-		fmt.Println(tData)
-
+		dPrint(tData, err)
+		if tData.Code == 0 {
+			this.retData(c, "ok", 0, tData.Data, format)
+			return
+		}
 	}
-
 	this.retFail(c, "file does not exist!")
 }
 
@@ -761,7 +769,7 @@ func (this *Server) Run() {
 
 	router.POST("/transfer", this.AsyncFileInfo)
 
-	fmt.Println("Listen Port on", Config().Addr)
+	dPrint("Listen Port on", Config().Addr)
 	router.Run(Config().Addr)
 }
 
