@@ -89,6 +89,9 @@ print cmd
 data = execShell(cmd)
 md5file = data[0].strip()
 
+fixedDir = time.strftime("%Y/%m/%d/", time.localtime()) + md5file
+
+
 url = "http://127.0.0.1:8081/upload"
 headers = {'User-Agent': 'Chrome/71.0.3578.98 Safari/537.36'}
 for f in os.listdir(runDir + "/tmp/mm/"):
@@ -104,7 +107,7 @@ for f in os.listdir(runDir + "/tmp/mm/"):
         'file': (f, open(fullPath, 'rb'), mimetypes.guess_type(fullPath)[0])
     }
     r = requests.post(
-        url=url, data={"scene": "m3u8", "group_md5": md5file, "fixed_dir": "sss"}, headers=headers, files=files)
+        url=url, data={"scene": "m3u8", "group_md5": md5file, "fixed_dir": fixedDir}, headers=headers, files=files)
     r.raise_for_status()
     print(r.text)
     print(r.status_code)
