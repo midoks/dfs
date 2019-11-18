@@ -24,6 +24,8 @@ const (
 	"peers": ["%s"],
 	"组号": "用于区别不同的集群(上传或下载)与support_group_manage配合使用,带在下载路径中",
 	"group": "group1",
+	"最大储存":"单位G",
+	"max_storage":10,
 	"是否支持按组（集群）管理,主要用途是Nginx支持多集群": "默认支持,不支持时路径为http://10.1.5.4:8080/action,支持时为http://10.1.5.4:8080/group(配置中的group参数)/action,action为动作名，如status,delete,sync等",
 	"support_group_manage": true,
 	"是否合并小文件": "默认不合并,合并可以解决inode不够用的情况（当前对于小于1M文件）进行合并",
@@ -103,6 +105,7 @@ type GloablConfig struct {
 	Peers                []string `json:"peers"`
 	NodeSave             int      `json:"node_save"`
 	Group                string   `json:"group"`
+	MaxStorage           int      `json:"max_storage"`
 	RenameFile           bool     `json:"rename_file"`
 	ShowDir              bool     `json:"show_dir"`
 	Extensions           []string `json:"extensions"`
