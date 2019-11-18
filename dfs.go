@@ -677,6 +677,7 @@ func (this *Server) AsyncSearch(c *gin.Context) {
 func (this *Server) AsyncDelete(c *gin.Context) {
 
 	md5 := c.PostForm("md5")
+	format := c.PostForm("format")
 
 	data, err := this.db.FindFileByMd5(md5)
 
