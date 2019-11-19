@@ -28,6 +28,14 @@ type BinFile struct {
 	Created string
 }
 
+type BinStatus struct {
+	Id      int64
+	Name    string
+	Value   string
+	Updated int64
+	Created string
+}
+
 func (this *DB) Init(path string) {
 	this.db, _ = sql.Open("sqlite3", path)
 
@@ -56,6 +64,19 @@ func (this *DB) Init(path string) {
 `
 	this.db.Exec(sql_table_bin_file)
 	this.db.Exec("create index bin_file_md5 on bin_file(md5);")
+
+	sql_table_bin_option := `
+    CREATE TABLE IF NOT EXISTS bin_option (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name char(50) NULL,
+        value TEXT NULL,
+        updated DATE NULL,
+        created DATE NULL
+    );
+`
+	this.db.Exec(sql_table_bin_option)
+	this.db.Exec("create index bin_option_name on bin_option(name);")
+
 }
 
 func (this *DB) FindFileGroupGetId(md5 string) int64 {

@@ -9,8 +9,10 @@ import (
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"github.com/midoks/godfs/database"
+	"github.com/robfig/cron"
 	"io"
 	"io/ioutil"
+	// slog "log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -142,6 +144,7 @@ func init() {
 	server = NewServer()
 	server.initComponent()
 	server.initDb()
+
 	dPrint("init", "init end")
 }
 
@@ -272,6 +275,35 @@ func (this *Server) initComponent() {
 
 func (this *Server) initDb() {
 	this.db = database.Open("data/dfs.db")
+}
+
+func (this *Server) strategyMove() {
+
+}
+
+func (this *Server) checkStorage() {
+	dPrint("checkStorage start")
+
+	fmt.Println(Config().MaxStorage * 1024 * 1024)
+
+	dPrint("checkStorage end")
+}
+
+func (this *Server) initCron() {
+
+	c := cron.New()
+	// c.Start()
+	c.AddFunc("@every 3s", func() {
+		this.checkStorage()
+	})
+
+	_, e := c.AddFunc("0/1 * * * ?", func() {
+		dPrint("schedule every two seconds ...")
+	})
+	if e != nil {
+		dPrint("添加任务失败: " + e.Error())
+	}
+	c.Start()
 }
 
 func (this *Server) initUploadTask() {
@@ -766,6 +798,7 @@ func (this *Server) Index(c *gin.Context) {
 }
 
 func (this *Server) Run() {
+	go this.initCron()
 
 	go this.initUploadTask()
 	go this.initCheckTask()
