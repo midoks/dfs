@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	log "github.com/cihub/seelog"
@@ -9,13 +8,8 @@ import (
 	"github.com/midoks/godfs/common"
 	"github.com/midoks/godfs/config"
 	"github.com/midoks/godfs/database"
-	"github.com/robfig/cron"
-	"io"
-	"io/ioutil"
-	// slog "log"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -66,7 +60,14 @@ type ReturnJsonData struct {
 	Data interface{} `json:"data"`
 }
 
+type ServerNode struct {
+	Addr   string
+	Status int
+}
+
 type Server struct {
+	ServerList []ServerNode
+
 	db *database.DB
 
 	queueUpload chan QueueUploadChan
@@ -83,30 +84,6 @@ func NewServer() *Server {
 
 func Config() *config.GloablConfig {
 	return (*config.GloablConfig)(atomic.LoadPointer(&ptr))
-}
-
-func dPrint(args ...interface{}) {
-	if Config().Debug {
-		fmt.Println("[", Config().Host, "]:[start]")
-		for i := 0; i < len(args); i++ {
-			fmt.Print(args[i])
-		}
-		fmt.Println("\n[end]")
-	}
-}
-
-func getOtherPeers() []string {
-
-	npeers := []string{}
-	peers := Config().Peers
-	host := Config().Host
-	for i := 0; i < len(peers); i++ {
-		if host == peers[i] {
-			continue
-		}
-		npeers = append(npeers, peers[i])
-	}
-	return npeers
 }
 
 func init() {
@@ -148,101 +125,6 @@ func init() {
 	dPrint("init", "init end")
 }
 
-func checkFileExists(post_url, md5 string) bool {
-
-	resp, _ := http.PostForm(post_url, url.Values{"md5": {md5}})
-	defer resp.Body.Close()
-	respBody, _ := ioutil.ReadAll(resp.Body)
-
-	m := ReturnJsonData{}
-
-	err := json.Unmarshal([]byte(string(respBody)), &m)
-	if err == nil {
-		if m.Code == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func asyncFileUpload(postUrl, groupMd5 string, info *database.BinFile) bool {
-
-	bodyBuffer := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuffer)
-
-	filePath := fmt.Sprintf(STORE_DIR+"/%s", info.Path)
-	fileWriter, _ := bodyWriter.CreateFormFile("file", filePath)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-	io.Copy(fileWriter, file)
-
-	bodyWriter.WriteField("path", info.Path)
-	bodyWriter.WriteField("md5", info.Md5)
-	bodyWriter.WriteField("group_md5", groupMd5)
-
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
-	defer resp.Body.Close()
-
-	respBody, _ := ioutil.ReadAll(resp.Body)
-
-	m := ReturnJsonData{}
-	err := json.Unmarshal([]byte(string(respBody)), &m)
-	if err == nil {
-		if m.Code == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func asyncFileInfo(postUrl string, info *database.BinFile) bool {
-
-	bodyBuffer := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuffer)
-
-	bodyWriter.WriteField("node", Config().Host)
-	bodyWriter.WriteField("md5", info.Md5)
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
-	defer resp.Body.Close()
-
-	respBody, _ := ioutil.ReadAll(resp.Body)
-
-	m := ReturnJsonData{}
-	err := json.Unmarshal([]byte(string(respBody)), &m)
-	if err == nil {
-		if m.Code == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func asyncSearch(postUrl string, md5 string, format string) (ReturnJsonData, error) {
-	bodyBuffer := &bytes.Buffer{}
-	bodyWriter := multipart.NewWriter(bodyBuffer)
-
-	bodyWriter.WriteField("format", Config().Host)
-	bodyWriter.WriteField("md5", md5)
-	contentType := bodyWriter.FormDataContentType()
-	bodyWriter.Close()
-
-	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
-	defer resp.Body.Close()
-
-	respBody, _ := ioutil.ReadAll(resp.Body)
-
-	m := ReturnJsonData{}
-	err := json.Unmarshal([]byte(string(respBody)), &m)
-	return m, err
-}
-
 func (this *Server) initComponent() {
 
 	if Config().ReadTimeout == 0 {
@@ -275,35 +157,6 @@ func (this *Server) initComponent() {
 
 func (this *Server) initDb() {
 	this.db = database.Open("data/dfs.db")
-}
-
-func (this *Server) strategyMove() {
-
-}
-
-func (this *Server) checkStorage() {
-	dPrint("checkStorage start")
-
-	fmt.Println(Config().MaxStorage * 1024 * 1024)
-
-	dPrint("checkStorage end")
-}
-
-func (this *Server) initCron() {
-
-	c := cron.New()
-	// c.Start()
-	c.AddFunc("@every 3s", func() {
-		this.checkStorage()
-	})
-
-	_, e := c.AddFunc("0/1 * * * ?", func() {
-		dPrint("schedule every two seconds ...")
-	})
-	if e != nil {
-		dPrint("添加任务失败: " + e.Error())
-	}
-	c.Start()
 }
 
 func (this *Server) initUploadTask() {
