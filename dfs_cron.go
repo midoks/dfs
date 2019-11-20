@@ -15,14 +15,12 @@ func (this *Server) strategyMove() {
 }
 
 func (this *Server) checkStorage() {
-	dPrint("checkStorage start")
 
 	maxStorage := Config().MaxStorage * 1024 * 1024 * 1024
 	useStorage, _ := this.db.GetSize()
+	percent := float64(useStorage) / float64(maxStorage)
 
-	fmt.Println(maxStorage, useStorage, float64(useStorage)/float64(maxStorage))
-
-	dPrint("checkStorage end")
+	dPrint("checkStorage:", maxStorage, useStorage, percent)
 }
 
 func (this *Server) initCron() {

@@ -17,11 +17,11 @@ import (
 
 func dPrint(args ...interface{}) {
 	if Config().Debug {
-		fmt.Println("[", Config().Host, "]:[start]")
+		fmt.Print("[DFS-debug]", Config().Host, "] ")
 		for i := 0; i < len(args); i++ {
-			fmt.Print(args[i])
+			fmt.Print(args[i], " ")
 		}
-		fmt.Println("\n[end]")
+		fmt.Print("\n")
 	}
 }
 
