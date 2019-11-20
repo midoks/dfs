@@ -105,7 +105,7 @@ type GloablConfig struct {
 	Peers                []string `json:"peers"`
 	NodeSave             int      `json:"node_save"`
 	Group                string   `json:"group"`
-	MaxStorage           int      `json:"max_storage"`
+	MaxStorage           int64    `json:"max_storage"`
 	RenameFile           bool     `json:"rename_file"`
 	ShowDir              bool     `json:"show_dir"`
 	Extensions           []string `json:"extensions"`
