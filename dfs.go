@@ -293,6 +293,10 @@ func (this *Server) uploadChan(c *gin.Context, tmpFilePath string) {
 	data["md5"] = fileMd5
 	data["group"] = Config().Group
 
+	err = this.db.AddSize(file.Size)
+	if err != nil {
+		fmt.Println(err)
+	}
 	this.retOk(c, data)
 }
 
@@ -387,6 +391,7 @@ func (this *Server) AsyncFileUpload(c *gin.Context) {
 	if err != nil {
 		this.retFail(c, "add db data fail!")
 	}
+	this.db.AddSize(file.Size)
 
 	this.retOk(c, "sync file successfully!")
 }
@@ -655,8 +660,6 @@ func (this *Server) Run() {
 
 	go this.initUploadTask()
 	go this.initCheckTask()
-
-	this.db.AddSize(1000)
 
 	router := gin.Default()
 

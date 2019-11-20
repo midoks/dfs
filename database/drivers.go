@@ -94,10 +94,6 @@ func (this *DB) AddSize(size int64) error {
 	sizeStr := strconv.FormatInt(size, 10)
 	data, err := this.FindOption(DB_STATUS_KEY)
 
-	if err != nil {
-		return err
-	}
-
 	if err == nil {
 
 		curSize, err := strconv.ParseInt(data.Value, 10, 64)
@@ -126,10 +122,6 @@ func (this *DB) AddSize(size int64) error {
 func (this *DB) ReduceSize(size int64) error {
 	sizeStr := strconv.FormatInt(size, 10)
 	data, err := this.FindOption(DB_STATUS_KEY)
-
-	if err != nil {
-		return err
-	}
 
 	if err == nil {
 

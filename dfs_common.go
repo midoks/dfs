@@ -59,13 +59,24 @@ func getOtherPeers() []string {
 
 func checkFileExists(post_url, md5 string) bool {
 
-	resp, _ := http.PostForm(post_url, url.Values{"md5": {md5}})
+	resp, err := http.PostForm(post_url, url.Values{"md5": {md5}})
+
+	if err != nil {
+		dPrint(err)
+		return false
+	}
+
 	defer resp.Body.Close()
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+
+	if err != nil {
+		dPrint(err)
+		return false
+	}
 
 	m := ReturnJsonData{}
 
-	err := json.Unmarshal([]byte(string(respBody)), &m)
+	err = json.Unmarshal([]byte(string(respBody)), &m)
 	if err == nil {
 		if m.Code == 0 {
 			return true
@@ -93,13 +104,21 @@ func asyncFileUpload(postUrl, groupMd5 string, info *database.BinFile) bool {
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
-	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
+	resp, err := http.Post(postUrl, contentType, bodyBuffer)
+	if err != nil {
+		dPrint(err)
+		return false
+	}
 	defer resp.Body.Close()
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		dPrint(err)
+		return false
+	}
 
 	m := ReturnJsonData{}
-	err := json.Unmarshal([]byte(string(respBody)), &m)
+	err = json.Unmarshal([]byte(string(respBody)), &m)
 	if err == nil {
 		if m.Code == 0 {
 			return true
@@ -118,13 +137,21 @@ func asyncFileInfo(postUrl string, info *database.BinFile) bool {
 	contentType := bodyWriter.FormDataContentType()
 	bodyWriter.Close()
 
-	resp, _ := http.Post(postUrl, contentType, bodyBuffer)
+	resp, err := http.Post(postUrl, contentType, bodyBuffer)
+	if err != nil {
+		dPrint(err)
+		return false
+	}
 	defer resp.Body.Close()
 
-	respBody, _ := ioutil.ReadAll(resp.Body)
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		dPrint(err)
+		return false
+	}
 
 	m := ReturnJsonData{}
-	err := json.Unmarshal([]byte(string(respBody)), &m)
+	err = json.Unmarshal([]byte(string(respBody)), &m)
 	if err == nil {
 		if m.Code == 0 {
 			return true
