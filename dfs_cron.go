@@ -25,16 +25,15 @@ func (this *Server) checkStorage() {
 func (this *Server) initCron() {
 
 	c := cron.New()
-	// c.Start()
-	c.AddFunc("@every 3s", func() {
-		this.checkStorage()
-	})
+	// c.AddFunc("@every 3s", func() {
+	// 	this.checkStorage()
+	// })
 
-	_, e := c.AddFunc("0/1 * * * ?", func() {
-		dPrint("schedule every two seconds ...")
-	})
-	if e != nil {
-		dPrint("添加任务失败: " + e.Error())
-	}
+	// _, e := c.AddFunc("0/1 * * * ?", func() {
+	// 	dPrint("schedule every two seconds ...")
+	// })
+	// if e != nil {
+	// 	dPrint("添加任务失败: " + e.Error())
+	// }
 	c.Start()
 }

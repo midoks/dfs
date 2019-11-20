@@ -656,6 +656,8 @@ func (this *Server) Run() {
 	go this.initUploadTask()
 	go this.initCheckTask()
 
+	this.db.AddSize(1000)
+
 	router := gin.Default()
 
 	groupRoute := ""

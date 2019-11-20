@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
+	"strconv"
 	"time"
 )
 
@@ -28,12 +29,17 @@ type BinFile struct {
 	Created string
 }
 
-type BinStatus struct {
+type BinOption struct {
 	Id      int64
 	Name    string
 	Value   string
-	Updated int64
+	Updated string
 	Created string
+}
+
+type BinOptionKey struct {
+	Name  string
+	Value int64
 }
 
 func (this *DB) Init(path string) {
@@ -68,7 +74,7 @@ func (this *DB) Init(path string) {
 	sql_table_bin_option := `
     CREATE TABLE IF NOT EXISTS bin_option (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name char(50) NULL,
+        name char(50) NULL UNIQUE,
         value TEXT NULL,
         updated DATE NULL,
         created DATE NULL
@@ -77,6 +83,143 @@ func (this *DB) Init(path string) {
 	this.db.Exec(sql_table_bin_option)
 	this.db.Exec("create index bin_option_name on bin_option(name);")
 
+}
+
+var (
+	DB_STATUS_KEY = "DB_STATUS_KEY"
+)
+
+func (this *DB) AddSize(size int64) error {
+
+	sizeStr := strconv.FormatInt(size, 10)
+	data, err := this.FindOption(DB_STATUS_KEY)
+
+	if err != nil {
+		return err
+	}
+
+	if err == nil {
+
+		curSize, err := strconv.ParseInt(data.Value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if err == nil {
+			newSize := curSize + size
+			newSizeStr := strconv.FormatInt(newSize, 10)
+			err = this.UpdateOption(DB_STATUS_KEY, newSizeStr)
+			if err != nil {
+				return err
+			}
+		}
+		return err
+	} else {
+		_, err := this.AddOption(DB_STATUS_KEY, sizeStr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (this *DB) ReduceSize(size int64) error {
+	sizeStr := strconv.FormatInt(size, 10)
+	data, err := this.FindOption(DB_STATUS_KEY)
+
+	if err != nil {
+		return err
+	}
+
+	if err == nil {
+
+		curSize, err := strconv.ParseInt(data.Value, 10, 64)
+		if err != nil {
+			return err
+		}
+
+		if err == nil {
+			newSize := curSize - size
+			newSizeStr := strconv.FormatInt(newSize, 10)
+			err = this.UpdateOption(DB_STATUS_KEY, newSizeStr)
+			if err != nil {
+				return err
+			}
+		}
+		return err
+	} else {
+		_, err := this.AddOption(DB_STATUS_KEY, sizeStr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (this *DB) FindOption(name string) (*BinOption, error) {
+	var (
+		err  error
+		rows *sql.Rows
+	)
+	di := &BinOption{}
+
+	rows, err = this.db.Query(fmt.Sprintf("select id,name,value,updated,created from bin_option where name='%s' limit 1", name))
+	if err != nil {
+		return di, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		err = rows.Scan(&di.Id, &di.Name, &di.Value, &di.Updated, &di.Created)
+		if err != nil {
+			return di, err
+		}
+		return di, nil
+	}
+
+	return di, errors.New("data has empty!")
+}
+
+func (this *DB) AddOption(name string, value string) (int64, error) {
+	var (
+		err  error
+		stmt *sql.Stmt
+		res  sql.Result
+		id   int64
+	)
+
+	stmt, err = this.db.Prepare("INSERT INTO bin_option(name,value,updated,created) values(?,?,?,?)")
+	if err != nil {
+		return 0, err
+	}
+	created := time.Now().Format("2006-01-02T15:04:05Z")
+	res, err = stmt.Exec(name, value, created, created)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err = res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (this *DB) UpdateOption(name string, value string) error {
+	var (
+		err  error
+		stmt *sql.Stmt
+	)
+	stmt, err = this.db.Prepare("UPDATE bin_option set value=?, updated=? where name=?")
+	if err != nil {
+		return err
+	}
+	updated := time.Now().Format("2006-01-02T15:04:05Z")
+	_, err = stmt.Exec(value, updated, name)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (this *DB) FindFileGroupGetId(md5 string) int64 {
