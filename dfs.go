@@ -61,12 +61,18 @@ type ReturnJsonData struct {
 }
 
 type ServerNode struct {
-	Addr   string
-	Status int
+	Addr    string
+	Status  int
+	Percent float64
+}
+
+type ServerStatus struct {
+	ReadyStatus bool
+	ServerList  []ServerNode
 }
 
 type Server struct {
-	ServerList []ServerNode
+	serverStatus ServerStatus
 
 	db *database.DB
 

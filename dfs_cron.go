@@ -20,7 +20,11 @@ func (this *Server) checkStorage() {
 	useStorage, _ := this.db.GetSize()
 	percent := float64(useStorage) / float64(maxStorage)
 
+	if percent > 0.8 {
+
+	}
 	dPrint("checkStorage:", maxStorage, useStorage, percent)
+
 }
 
 func (this *Server) initCron() {
