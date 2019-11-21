@@ -19,7 +19,7 @@ import (
 func dPrint(args ...interface{}) {
 	if Config().Debug {
 		now := time.Now().Format("2006-01-02T15:04:05Z")
-		fmt.Print("[DFS-debug--", now, "]", Config().Host, "] ")
+		fmt.Print("[DFS-debug ", "(", now, ") ", Config().Host, "] ")
 		for i := 0; i < len(args); i++ {
 			fmt.Print(args[i], " ")
 		}
