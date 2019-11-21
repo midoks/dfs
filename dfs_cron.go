@@ -10,6 +10,10 @@ func (this *Server) strategyCheckNode() {
 	fmt.Println("strategyCheckNode end")
 }
 
+func (this *Server) updatedServerNode() {
+
+}
+
 func (this *Server) strategyMove() {
 
 }

@@ -8,7 +8,7 @@ rm -rf dfs $ROOT_DIR/files/*
 
 ps -ef|grep dfs | grep -v grep  | grep -v godfs | awk '{print $2}' | xargs kill
 
-go build dfs.go
+go build *.go
 
 mkdir -p $ROOT_DIR/tmp/test1
 cp dfs $ROOT_DIR/tmp/test1
