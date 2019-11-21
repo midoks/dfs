@@ -624,8 +624,18 @@ func (this *Server) CheckFileExists(c *gin.Context) {
 
 func (this *Server) Status(c *gin.Context) {
 
+	maxStorage := Config().MaxStorage * 1024 * 1024 * 1024
+	useStorage, _ := this.db.GetSize()
+	percent := float64(useStorage) / float64(maxStorage)
+
+	storage := make(map[string]interface{})
+	storage["max"] = maxStorage
+	storage["use"] = useStorage
+	storage["percent"] = percent
+
 	data := make(map[string]interface{})
 	data["peers"] = Config().Peers
+	data["storage"] = storage
 
 	this.retOk(c, data)
 }
